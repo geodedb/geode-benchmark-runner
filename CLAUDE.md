@@ -63,6 +63,7 @@ Output (output.zig) → JSON results + markdown summaries
 
 **Key Design Decisions**:
 
+- **Parameterized queries**: Runner uses `execWithParams` with JSON params object instead of string substitution (prevents injection attacks)
 - **String lifecycle in config.zig**: All JSON-parsed strings are duplicated with `allocator.dupe()` to prevent use-after-free when the JSON parser is deallocated
 - **Worker thread safety in runner.zig**: Shared state (latencies, errors, violations) protected by mutex; worker contexts pre-allocated before thread spawn to prevent pointer invalidation
 - **Driver protocol**: Uses HELLO handshake → RUN_GQL → SCHEMA response → PULL → BINDINGS response flow
@@ -120,7 +121,7 @@ After running a benchmark, the output directory contains:
 ## Dependencies
 
 From `build.zig.zon`:
-- `geode_client` - Official Geode Zig client (local path: `../../geode-client-zig`)
+- `geode_client` - Official Geode Zig client (local path: `../geode-client-zig`)
 - `zig_cli` - CLI framework
 - `yaml` - YAML parser for benchmark packs
 - `quic`, `json`, `slog`, `strings` - Supporting libraries from gitlab.com/devnw/zig
@@ -142,6 +143,6 @@ GitLab CI pipeline runs on every push with stages: lint, build, test, integratio
 ## Known Limitations
 
 - Dataset loader in `loader.zig` is stubbed (use `scripts/load_finbench.sh` instead)
-- Parameter substitution (`$param` templates) supports limited built-in params: `$id`, `$src`, `$dst`, `$min_age`, `$name`, `$ts`, `$weight`
+- Parameterized queries support limited built-in params: `$id`, `$src`, `$dst`, `$min_age`, `$name`, `$ts`, `$weight`
 - Sweep execution re-reads config for each point (doesn't preserve in-memory modifications)
 - Integration tests require access to private Geode container registry

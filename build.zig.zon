@@ -16,7 +16,7 @@
         // Geode client library (QUIC-based graph database client)
         // Uses relative path - CI clones this to the correct location
         .geode_client = .{
-            .path = "../../geode-client-zig",
+            .path = "../geode-client-zig",
         },
         // CLI framework (Cobra/Viper-class features)
         .zig_cli = .{

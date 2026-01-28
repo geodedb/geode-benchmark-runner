@@ -48,43 +48,59 @@ fn workerThread(ctx: *WorkerContext) void {
         const op_idx = selectOperation(ctx.pack.operations, &rng);
         const op = ctx.pack.operations[op_idx];
 
-        // Substitute parameters in query
-        const query = substituteParams(ctx.allocator, op.query, request_id, &rng) catch op.query;
-        defer if (query.ptr != op.query.ptr) ctx.allocator.free(query);
-
         request_id += 1;
 
-        var result = db_driver.exec(query, null) catch |err| {
-            std.debug.print("[Worker {}] Query error: {}\n", .{ ctx.worker_id, err });
-            ctx.mutex.lock();
-            ctx.errors.* += 1;
-            ctx.mutex.unlock();
-            continue;
+        // Build parameterized query params as JSON
+        var params = buildQueryParams(ctx.allocator, op.query, request_id, &rng) catch null;
+        defer if (params) |*p| {
+            // Clean up allocated strings in params
+            freeJsonParams(ctx.allocator, p);
         };
-        defer result.deinit(ctx.allocator);
 
-        if (!result.success) {
+        // Execute with parameterized query (secure against injection)
+        var result = if (params) |p|
+            db_driver.execWithParams(op.query, p) catch |err| blk: {
+                std.debug.print("[Worker {}] Query error: {}\n", .{ ctx.worker_id, err });
+                ctx.mutex.lock();
+                ctx.errors.* += 1;
+                ctx.mutex.unlock();
+                break :blk null;
+            }
+        else
+            db_driver.exec(op.query, null) catch |err| blk: {
+                std.debug.print("[Worker {}] Query error: {}\n", .{ ctx.worker_id, err });
+                ctx.mutex.lock();
+                ctx.errors.* += 1;
+                ctx.mutex.unlock();
+                break :blk null;
+            };
+
+        if (result) |*res| {
+            defer res.deinit(ctx.allocator);
+
+            if (!res.success) {
+                ctx.mutex.lock();
+                ctx.errors.* += 1;
+                ctx.mutex.unlock();
+
+                if (res.error_message) |msg| {
+                    std.debug.print("[Worker {}] Query failed: {s}\n", .{ ctx.worker_id, msg });
+                }
+            } else {
+                ctx.mutex.lock();
+                defer ctx.mutex.unlock();
+
+                ctx.latencies.append(ctx.allocator, res.latency_ms) catch {};
+
+                if (res.latency_ms > @as(f64, @floatFromInt(ctx.slo_ms))) {
+                    ctx.violations.* += 1;
+                }
+            }
+
             ctx.mutex.lock();
-            ctx.errors.* += 1;
+            ctx.total_requests.* += 1;
             ctx.mutex.unlock();
-
-            if (result.error_message) |msg| {
-                std.debug.print("[Worker {}] Query failed: {s}\n", .{ ctx.worker_id, msg });
-            }
-        } else {
-            ctx.mutex.lock();
-            defer ctx.mutex.unlock();
-
-            ctx.latencies.append(ctx.allocator, result.latency_ms) catch {};
-
-            if (result.latency_ms > @as(f64, @floatFromInt(ctx.slo_ms))) {
-                ctx.violations.* += 1;
-            }
         }
-
-        ctx.mutex.lock();
-        ctx.total_requests.* += 1;
-        ctx.mutex.unlock();
 
         // Small delay to avoid overwhelming
         std.posix.nanosleep(0, 1 * std.time.ns_per_ms);
@@ -110,59 +126,95 @@ fn selectOperation(operations: []const benchpack.BenchPack.Operation, rng: *std.
     return operations.len - 1;
 }
 
-fn substituteParams(allocator: std.mem.Allocator, query: []const u8, request_id: u64, rng: *std.Random.DefaultPrng) ![]const u8 {
-    // Simple parameter substitution for common parameters
-    var result = std.ArrayList(u8){};
-    errdefer result.deinit(allocator);
-
+/// Build query parameters as a JSON object for parameterized queries.
+/// Returns null if the query has no recognized parameters.
+/// This is the secure way to pass values - prevents injection attacks.
+fn buildQueryParams(allocator: std.mem.Allocator, query: []const u8, request_id: u64, rng: *std.Random.DefaultPrng) !?std.json.Value {
+    // Scan for $param placeholders
+    var has_params = false;
     var i: usize = 0;
+    while (i < query.len) : (i += 1) {
+        if (i + 1 < query.len and query[i] == '$' and std.ascii.isAlphabetic(query[i + 1])) {
+            has_params = true;
+            break;
+        }
+    }
+
+    if (!has_params) return null;
+
+    // Build parameter map
+    var params = std.json.ObjectMap.init(allocator);
+    errdefer params.deinit();
+
+    // Scan and add each parameter found in the query
+    i = 0;
     while (i < query.len) {
         if (i + 1 < query.len and query[i] == '$') {
-            // Find parameter name
             const start = i + 1;
             var end = start;
             while (end < query.len and (std.ascii.isAlphanumeric(query[end]) or query[end] == '_')) {
                 end += 1;
             }
 
-            const param_name = query[start..end];
+            if (end > start) {
+                const param_name = query[start..end];
+                const key = try allocator.dupe(u8, param_name);
 
-            // Substitute common parameters
-            if (std.mem.eql(u8, param_name, "id")) {
-                const id = rng.random().intRangeAtMost(u32, 1, 1000);
-                try result.writer(allocator).print("{d}", .{id});
-            } else if (std.mem.eql(u8, param_name, "src")) {
-                const id = rng.random().intRangeAtMost(u32, 1, 500);
-                try result.writer(allocator).print("{d}", .{id});
-            } else if (std.mem.eql(u8, param_name, "dst")) {
-                const id = rng.random().intRangeAtMost(u32, 501, 1000);
-                try result.writer(allocator).print("{d}", .{id});
-            } else if (std.mem.eql(u8, param_name, "min_age")) {
-                const age = rng.random().intRangeAtMost(u32, 18, 65);
-                try result.writer(allocator).print("{d}", .{age});
-            } else if (std.mem.eql(u8, param_name, "name")) {
-                try result.appendSlice(allocator, "'test_");
-                try result.writer(allocator).print("{d}", .{request_id});
-                try result.appendSlice(allocator, "'");
-            } else if (std.mem.eql(u8, param_name, "ts")) {
-                try result.writer(allocator).print("{d}", .{std.time.milliTimestamp()});
-            } else if (std.mem.eql(u8, param_name, "weight")) {
-                const weight = rng.random().float(f64);
-                try result.writer(allocator).print("{d:.2}", .{weight});
-            } else {
-                // Unknown parameter, keep as-is
-                try result.append(allocator, '$');
-                try result.appendSlice(allocator, param_name);
+                // Generate value based on parameter name
+                if (std.mem.eql(u8, param_name, "id")) {
+                    const id = rng.random().intRangeAtMost(u32, 1, 1000);
+                    try params.put(key, .{ .integer = @intCast(id) });
+                } else if (std.mem.eql(u8, param_name, "src")) {
+                    const id = rng.random().intRangeAtMost(u32, 1, 500);
+                    try params.put(key, .{ .integer = @intCast(id) });
+                } else if (std.mem.eql(u8, param_name, "dst")) {
+                    const id = rng.random().intRangeAtMost(u32, 501, 1000);
+                    try params.put(key, .{ .integer = @intCast(id) });
+                } else if (std.mem.eql(u8, param_name, "min_age")) {
+                    const age = rng.random().intRangeAtMost(u32, 18, 65);
+                    try params.put(key, .{ .integer = @intCast(age) });
+                } else if (std.mem.eql(u8, param_name, "name")) {
+                    const name_str = try std.fmt.allocPrint(allocator, "test_{d}", .{request_id});
+                    try params.put(key, .{ .string = name_str });
+                } else if (std.mem.eql(u8, param_name, "ts")) {
+                    try params.put(key, .{ .integer = std.time.milliTimestamp() });
+                } else if (std.mem.eql(u8, param_name, "weight")) {
+                    const weight = rng.random().float(f64);
+                    try params.put(key, .{ .float = weight });
+                } else {
+                    // Unknown parameter - free the key since we won't use it
+                    allocator.free(key);
+                }
+
+                i = end;
+                continue;
             }
-
-            i = end;
-        } else {
-            try result.append(allocator, query[i]);
-            i += 1;
         }
+        i += 1;
     }
 
-    return try result.toOwnedSlice(allocator);
+    if (params.count() == 0) {
+        params.deinit();
+        return null;
+    }
+
+    return .{ .object = params };
+}
+
+/// Free allocated strings in JSON params object
+fn freeJsonParams(allocator: std.mem.Allocator, params: *std.json.Value) void {
+    if (params.* == .object) {
+        var iter = params.object.iterator();
+        while (iter.next()) |entry| {
+            // Free the key
+            allocator.free(entry.key_ptr.*);
+            // Free string values
+            if (entry.value_ptr.* == .string) {
+                allocator.free(entry.value_ptr.string);
+            }
+        }
+        params.object.deinit();
+    }
 }
 
 pub fn executeBenchmark(

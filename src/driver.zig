@@ -182,8 +182,8 @@ pub const GeodeDriver = struct {
         // Send RUN_GQL message with params
         try self.client.?.sendRunGql(request_id, query, params);
 
-        // Receive response
-        const response_raw = self.client.?.receiveMessage(self.db_config.timeout_ms) catch |err| {
+        // Receive SCHEMA response first
+        const schema_response = self.client.?.receiveMessage(self.db_config.timeout_ms) catch |err| {
             const end = std.time.microTimestamp();
             const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
 
@@ -195,13 +195,12 @@ pub const GeodeDriver = struct {
                 .result_data = null,
             };
         };
-        defer self.allocator.free(response_raw);
+        defer self.allocator.free(schema_response);
 
-        const end = std.time.microTimestamp();
-        const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
-
-        // Parse response
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, response_raw, .{}) catch {
+        // Parse SCHEMA response to check for errors
+        const schema_parsed = std.json.parseFromSlice(std.json.Value, self.allocator, schema_response, .{}) catch {
+            const end = std.time.microTimestamp();
+            const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
             const err_msg = try std.fmt.allocPrint(self.allocator, "Invalid JSON response", .{});
             return QueryResult{
                 .success = false,
@@ -210,28 +209,65 @@ pub const GeodeDriver = struct {
                 .result_data = null,
             };
         };
-        defer parsed.deinit();
+        defer schema_parsed.deinit();
 
-        // Check for error
-        if (parsed.value.object.get("type")) |type_val| {
-            if (type_val == .string and std.mem.eql(u8, type_val.string, "ERROR")) {
-                const err_msg_field = parsed.value.object.get("message");
-                const err_str = if (err_msg_field) |f| if (f == .string) f.string else "Unknown error" else "Unknown error";
-                const err_msg = try self.allocator.dupe(u8, err_str);
-                return QueryResult{
-                    .success = false,
-                    .latency_ms = latency,
-                    .error_message = err_msg,
-                    .result_data = null,
-                };
+        // Check for ERROR response
+        if (schema_parsed.value.object.get("result")) |result_val| {
+            if (result_val.object.get("type")) |type_val| {
+                if (type_val == .string and std.mem.eql(u8, type_val.string, "ERROR")) {
+                    const end = std.time.microTimestamp();
+                    const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
+                    const err_msg_field = result_val.object.get("message");
+                    const err_str = if (err_msg_field) |f| if (f == .string) f.string else "Unknown error" else "Unknown error";
+                    const err_msg = try self.allocator.dupe(u8, err_str);
+                    return QueryResult{
+                        .success = false,
+                        .latency_ms = latency,
+                        .error_message = err_msg,
+                        .result_data = null,
+                    };
+                }
             }
         }
+
+        // Check if BINDINGS was already received (inline/buffered)
+        if (try self.client.?.tryReceiveBufferedMessage()) |bindings_response| {
+            const end = std.time.microTimestamp();
+            const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
+
+            return QueryResult{
+                .success = true,
+                .latency_ms = latency,
+                .error_message = null,
+                .result_data = bindings_response,
+            };
+        }
+
+        // Send PULL to request BINDINGS
+        try self.client.?.sendPull(request_id, 1000);
+
+        // Receive BINDINGS response with actual data
+        const bindings_response = self.client.?.receiveMessage(self.db_config.timeout_ms) catch |err| {
+            const end = std.time.microTimestamp();
+            const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
+
+            const err_msg = try std.fmt.allocPrint(self.allocator, "Timeout waiting for BINDINGS: {}", .{err});
+            return QueryResult{
+                .success = false,
+                .latency_ms = latency,
+                .error_message = err_msg,
+                .result_data = null,
+            };
+        };
+
+        const end = std.time.microTimestamp();
+        const latency = @as(f64, @floatFromInt(end - start)) / 1000.0;
 
         return QueryResult{
             .success = true,
             .latency_ms = latency,
             .error_message = null,
-            .result_data = try self.allocator.dupe(u8, response_raw),
+            .result_data = bindings_response,
         };
     }
 

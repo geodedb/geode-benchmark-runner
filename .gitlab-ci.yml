@@ -104,11 +104,11 @@ include:
       - zig-${ZIG_VERSION}/
   before_script:
     - apt-get update && apt-get install -y curl xz-utils git libssl-dev
-    # Clone geode-client-zig dependency (relative path: ../../geode-client-zig)
+    # Clone geode-client-zig dependency (relative path: ../geode-client-zig)
     - |
       echo "Cloning geode-client-zig dependency..."
-      mkdir -p ../..
-      cd ../..
+      mkdir -p ..
+      cd ..
       if [ ! -d "geode-client-zig" ]; then
         # Use GEODE_CLONE_TOKEN if set, otherwise fall back to CI_JOB_TOKEN
         if [ -n "${GEODE_CLONE_TOKEN}" ]; then
