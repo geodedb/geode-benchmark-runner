@@ -12,13 +12,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build (requires Zig 0.15.2)
-zig build -Doptimize=ReleaseFast
+zig build                           # Debug build
+zig build -Doptimize=ReleaseFast    # Release build
 
 # Run unit tests
 zig build test
 
 # Run with arguments
 zig build run -- run --config examples/configs/geode_test.json --out test_results/
+
+# Or use Makefile
+make build          # Debug build
+make build-release  # Release build
+make test           # Run tests
+```
+
+## Development Setup
+
+```bash
+# Install pre-commit hooks (recommended)
+make setup-dev
+
+# Or manually:
+pip install pre-commit
+pre-commit install
+pre-commit install --hook-type commit-msg
+pre-commit install --hook-type pre-push
+
+# Run all checks
+make pre-commit
 ```
 
 ## CLI Commands
@@ -104,6 +126,7 @@ Benchmarks are configured via JSON files (see `examples/configs/`):
 ## Output Files
 
 After running a benchmark, the output directory contains:
+
 - `result.json` - QPS, latency percentiles, error/violation rates, validity status
 - `meta.json` - Scenario metadata (network mode, transport, db version)
 - `summary.md` - Human-readable markdown summary
@@ -121,6 +144,7 @@ After running a benchmark, the output directory contains:
 ## Dependencies
 
 From `build.zig.zon`:
+
 - `geode_client` - Official Geode Zig client (local path: `../geode-client-zig`)
 - `zig_cli` - CLI framework
 - `yaml` - YAML parser for benchmark packs
@@ -133,6 +157,7 @@ GitLab CI pipeline runs on every push with stages: lint, build, test, integratio
 **Required Setup**: The `geode-client-zig` dependency must be accessible to CI. This is configured via CI job token allowlist (already set up) or a `GEODE_CLONE_TOKEN` variable.
 
 **Key Jobs**:
+
 - `zig-format` - Code formatting check
 - `build` - Debug build verification
 - `test` - Unit tests with coverage reporting

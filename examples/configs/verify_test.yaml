@@ -1,11 +1,11 @@
 db:
-  host: "127.0.0.1"
+  host: 127.0.0.1
   port: 3141
-  transport: "quic_tls_insecure"
+  transport: quic_tls_insecure
   timeout_ms: 5000
 
 workload:
-  benchpack: "verify_data"
+  benchpack: verify_data
   slo_ms: 100
   duration_sec: 5
   workers: 1

@@ -23,5 +23,5 @@ dataset:
 loader:
   type: quic_gql_batch
   batch_size: 50
-  insert_node_template: "CREATE (n:{{label}} {id: {{id}}{{props}}}) RETURN n"
-  insert_edge_template: "MATCH (a:{{src_label}} {id: {{src}}}), (b:{{dst_label}} {id: {{dst}}}) CREATE (a)-[:{{type}}{{props}}]->(b)"
+  insert_node_template: 'CREATE (n:{{label}} {id: {{id}}{{props}}}) RETURN n'
+  insert_edge_template: 'MATCH (a:{{src_label}} {id: {{src}}}), (b:{{dst_label}} {id: {{dst}}}) CREATE (a)-[:{{type}}{{props}}]->(b)'

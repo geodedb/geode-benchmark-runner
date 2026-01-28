@@ -8,11 +8,13 @@
 <!-- Describe what you've already attempted -->
 
 ## Configuration
+
 ```json
 // Relevant configuration if applicable
 ```
 
 ## Environment
+
 - **Zig Version**:
 - **graphbench Version/Commit**:
 

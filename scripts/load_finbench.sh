@@ -1,6 +1,8 @@
 #!/bin/bash
 # Load LDBC FinBench data into Geode
 # Usage: ./load_finbench.sh /path/to/sf0.01
+#
+# shellcheck disable=SC2034  # Unused variables are intentional - parsing CSV columns
 
 set -e
 

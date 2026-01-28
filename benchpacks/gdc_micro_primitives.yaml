@@ -2,37 +2,37 @@ name: gdc_micro_primitives
 description: GDC-aligned micro-benchmark primitives for graph operations
 
 operations:
-  - name: point_lookup
-    query: "MATCH (n) WHERE id(n) = $id RETURN n"
-    weight: 1.0
-    slo_ms: 50
+- name: point_lookup
+  query: MATCH (n) WHERE id(n) = $id RETURN n
+  weight: 1.0
+  slo_ms: 50
 
-  - name: k_hop_traversal_1
-    query: "MATCH (start)-[*1..1]-(neighbor) WHERE id(start) = $id RETURN neighbor LIMIT 10"
-    weight: 1.0
-    slo_ms: 100
+- name: k_hop_traversal_1
+  query: MATCH (start)-[*1..1]-(neighbor) WHERE id(start) = $id RETURN neighbor LIMIT 10
+  weight: 1.0
+  slo_ms: 100
 
-  - name: k_hop_traversal_2
-    query: "MATCH (start)-[*1..2]-(neighbor) WHERE id(start) = $id RETURN neighbor LIMIT 10"
-    weight: 1.0
-    slo_ms: 150
+- name: k_hop_traversal_2
+  query: MATCH (start)-[*1..2]-(neighbor) WHERE id(start) = $id RETURN neighbor LIMIT 10
+  weight: 1.0
+  slo_ms: 150
 
-  - name: property_filter
-    query: "MATCH (n) WHERE n.age > $min_age RETURN n LIMIT 100"
-    weight: 0.5
-    slo_ms: 100
+- name: property_filter
+  query: MATCH (n) WHERE n.age > $min_age RETURN n LIMIT 100
+  weight: 0.5
+  slo_ms: 100
 
-  - name: count_nodes
-    query: "MATCH (n) RETURN count(n)"
-    weight: 0.25
-    slo_ms: 200
+- name: count_nodes
+  query: MATCH (n) RETURN count(n)
+  weight: 0.25
+  slo_ms: 200
 
-  - name: label_scan
-    query: "MATCH (n:Person) RETURN n LIMIT 100"
-    weight: 0.5
-    slo_ms: 100
+- name: label_scan
+  query: MATCH (n:Person) RETURN n LIMIT 100
+  weight: 0.5
+  slo_ms: 100
 
-  - name: edge_traversal
-    query: "MATCH (a)-[r]->(b) WHERE id(a) = $id RETURN b, type(r)"
-    weight: 1.0
-    slo_ms: 75
+- name: edge_traversal
+  query: MATCH (a)-[r]->(b) WHERE id(a) = $id RETURN b, type(r)
+  weight: 1.0
+  slo_ms: 75

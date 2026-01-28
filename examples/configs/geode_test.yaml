@@ -9,7 +9,7 @@ scenario:
   durability: fsync
   consistency: serializable
   cache_state: warm
-  db_version: "0.18.0"
+  db_version: 0.18.0
 
 workload:
   benchpack: gdc_micro_primitives

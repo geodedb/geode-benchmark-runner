@@ -75,6 +75,7 @@ All settings in JSON:
 ## Project Status
 
 This is a **working prototype** demonstrating:
+
 - Real QUIC+TLS connectivity to Geode
 - Proper config/string lifecycle management (fixed arena issues)
 - Concurrent worker pools with mutex-protected shared state
@@ -104,6 +105,7 @@ This is a **working prototype** demonstrating:
 ## Dependencies (Apache-2.0 licensed)
 
 From `~/src/gl/devnw/zig/`:
+
 - **quic** - QUIC transport (RFC 9000)
 - **tls** - TLS 1.3 implementation
 - **dns** - DNS resolution
@@ -112,6 +114,7 @@ From `~/src/gl/devnw/zig/`:
 - **uri**, **strings**, **config** - Utilities
 
 From `../geode-client-zig`:
+
 - **geode_client** - Official Geode Zig client
 
 ## License
