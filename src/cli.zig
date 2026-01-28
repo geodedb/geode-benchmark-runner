@@ -26,7 +26,7 @@ pub fn printUsage(file: std.fs.File) !void {
 pub fn runCommand(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var config_path: ?[]const u8 = null;
     var out_dir: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
@@ -37,12 +37,12 @@ pub fn runCommand(allocator: std.mem.Allocator, args: []const []const u8) !void 
             i += 1;
         }
     }
-    
+
     if (config_path == null or out_dir == null) {
         std.debug.print("Error: --config and --out are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const runner = @import("runner.zig");
     try runner.executeBenchmark(allocator, config_path.?, out_dir.?);
 }
@@ -50,7 +50,7 @@ pub fn runCommand(allocator: std.mem.Allocator, args: []const []const u8) !void 
 pub fn sweepCommand(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var config_path: ?[]const u8 = null;
     var out_dir: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
@@ -61,19 +61,19 @@ pub fn sweepCommand(allocator: std.mem.Allocator, args: []const []const u8) !voi
             i += 1;
         }
     }
-    
+
     if (config_path == null or out_dir == null) {
         std.debug.print("Error: --config and --out are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const runner = @import("runner.zig");
     try runner.executeSweep(allocator, config_path.?, out_dir.?);
 }
 
 pub fn validateCommand(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var config_path: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
@@ -81,16 +81,16 @@ pub fn validateCommand(allocator: std.mem.Allocator, args: []const []const u8) !
             i += 1;
         }
     }
-    
+
     if (config_path == null) {
         std.debug.print("Error: --config is required\n", .{});
         std.process.exit(1);
     }
-    
+
     const config = @import("config.zig");
     var cfg = try config.loadConfig(allocator, config_path.?);
     defer cfg.deinit();
-    
+
     std.debug.print("Configuration is valid\n", .{});
 }
 
@@ -99,9 +99,9 @@ pub fn datasetCommand(allocator: std.mem.Allocator, args: []const []const u8) !v
         std.debug.print("Error: dataset subcommand required (prepare/load/verify)\n", .{});
         std.process.exit(1);
     }
-    
+
     const subcommand = args[0];
-    
+
     if (std.mem.eql(u8, subcommand, "prepare")) {
         try datasetPrepareCommand(allocator, args[1..]);
     } else if (std.mem.eql(u8, subcommand, "load")) {
@@ -118,7 +118,7 @@ fn datasetPrepareCommand(allocator: std.mem.Allocator, args: []const []const u8)
     var dataset_path: ?[]const u8 = null;
     var out_dir: ?[]const u8 = null;
     var dataset_type: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--dataset") and i + 1 < args.len) {
@@ -132,12 +132,12 @@ fn datasetPrepareCommand(allocator: std.mem.Allocator, args: []const []const u8)
             i += 1;
         }
     }
-    
+
     if (dataset_path == null or out_dir == null) {
         std.debug.print("Error: --dataset and --out are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const dataset = @import("dataset.zig");
     try dataset.prepareDataset(allocator, dataset_path.?, out_dir.?, dataset_type);
 }
@@ -146,7 +146,7 @@ fn datasetLoadCommand(allocator: std.mem.Allocator, args: []const []const u8) !v
     var config_path: ?[]const u8 = null;
     var dataset_id: ?[]const u8 = null;
     var workdir: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
@@ -160,12 +160,12 @@ fn datasetLoadCommand(allocator: std.mem.Allocator, args: []const []const u8) !v
             i += 1;
         }
     }
-    
+
     if (config_path == null or dataset_id == null or workdir == null) {
         std.debug.print("Error: --config, --dataset-id, and --workdir are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const loader = @import("loader.zig");
     try loader.loadDataset(allocator, config_path.?, dataset_id.?, workdir.?);
 }
@@ -174,7 +174,7 @@ fn datasetVerifyCommand(allocator: std.mem.Allocator, args: []const []const u8) 
     var config_path: ?[]const u8 = null;
     var dataset_id: ?[]const u8 = null;
     var workdir: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
@@ -188,12 +188,12 @@ fn datasetVerifyCommand(allocator: std.mem.Allocator, args: []const []const u8) 
             i += 1;
         }
     }
-    
+
     if (config_path == null or dataset_id == null or workdir == null) {
         std.debug.print("Error: --config, --dataset-id, and --workdir are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const dataset = @import("dataset.zig");
     try dataset.verifyDataset(allocator, config_path.?, dataset_id.?, workdir.?);
 }
@@ -203,9 +203,9 @@ pub fn paramsCommand(allocator: std.mem.Allocator, args: []const []const u8) !vo
         std.debug.print("Error: params subcommand required (prepare)\n", .{});
         std.process.exit(1);
     }
-    
+
     const subcommand = args[0];
-    
+
     if (std.mem.eql(u8, subcommand, "prepare")) {
         try paramsPrepareCommand(allocator, args[1..]);
     } else {
@@ -217,7 +217,7 @@ pub fn paramsCommand(allocator: std.mem.Allocator, args: []const []const u8) !vo
 fn paramsPrepareCommand(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var params_path: ?[]const u8 = null;
     var out_dir: ?[]const u8 = null;
-    
+
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--params") and i + 1 < args.len) {
@@ -228,12 +228,12 @@ fn paramsPrepareCommand(allocator: std.mem.Allocator, args: []const []const u8) 
             i += 1;
         }
     }
-    
+
     if (params_path == null or out_dir == null) {
         std.debug.print("Error: --params and --out are required\n", .{});
         std.process.exit(1);
     }
-    
+
     const dataset = @import("dataset.zig");
     try dataset.prepareParams(allocator, params_path.?, out_dir.?);
 }

@@ -11,10 +11,10 @@ pub fn writeResults(
 ) !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "result.json" });
     defer allocator.free(path);
-    
+
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
-    
+
     const content = try std.fmt.allocPrint(allocator,
         \\{{
         \\  "qps": {d:.2},
@@ -54,7 +54,7 @@ pub fn writeResults(
         cfg.workload.slo_ms,
     });
     defer allocator.free(content);
-    
+
     try file.writeAll(content);
 }
 
@@ -65,10 +65,10 @@ pub fn writeMeta(
 ) !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "meta.json" });
     defer allocator.free(path);
-    
+
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
-    
+
     const content = try std.fmt.allocPrint(allocator,
         \\{{
         \\  "network_mode": "{s}",
@@ -90,7 +90,7 @@ pub fn writeMeta(
         cfg.workload.benchpack,
     });
     defer allocator.free(content);
-    
+
     try file.writeAll(content);
 }
 
@@ -103,16 +103,16 @@ pub fn writeSummary(
 ) !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "summary.md" });
     defer allocator.free(path);
-    
+
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
-    
+
     var content_parts = std.array_list.AlignedManaged([]const u8, null).init(allocator);
     defer {
         for (content_parts.items) |part| allocator.free(part);
         content_parts.deinit();
     }
-    
+
     try content_parts.append(try std.fmt.allocPrint(allocator,
         \\# Benchmark Summary
         \\
@@ -148,14 +148,14 @@ pub fn writeSummary(
         metrics.tail_amplification,
         validity.is_valid,
     }));
-    
+
     if (!validity.is_valid) {
         try content_parts.append(try allocator.dupe(u8, "**Reasons for invalidity:**\n\n"));
         for (validity.reasons) |reason| {
             try content_parts.append(try std.fmt.allocPrint(allocator, "- {s}\n", .{reason}));
         }
     }
-    
+
     try content_parts.append(try std.fmt.allocPrint(allocator,
         \\
         \\## Concurrency Analysis
@@ -172,7 +172,7 @@ pub fn writeSummary(
         metrics.required_in_flight,
         @tagName(cfg.scenario.network_mode),
     }));
-    
+
     if (cfg.scenario.network_mode == .loopback) {
         try content_parts.append(try allocator.dupe(u8,
             \\Loopback mode includes realistic RPC overhead but not realistic network RTT.
@@ -180,7 +180,7 @@ pub fn writeSummary(
             \\
         ));
     }
-    
+
     for (content_parts.items) |part| {
         try file.writeAll(part);
     }
@@ -194,10 +194,10 @@ pub fn writeSweepResults(
 ) !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "sweep.json" });
     defer allocator.free(path);
-    
+
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
-    
+
     const content = try std.fmt.allocPrint(allocator,
         \\{{
         \\  "best_value": {d},
@@ -206,6 +206,6 @@ pub fn writeSweepResults(
         \\
     , .{ best_value, best_qps });
     defer allocator.free(content);
-    
+
     try file.writeAll(content);
 }

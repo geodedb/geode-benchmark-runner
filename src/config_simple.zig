@@ -4,7 +4,7 @@ pub const BenchConfig = struct {
     db_host: []const u8,
     db_port: u16,
     slo_ms: u32,
-    
+
     pub fn deinit(_: *BenchConfig) void {}
 };
 

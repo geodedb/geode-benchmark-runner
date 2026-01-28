@@ -4,7 +4,9 @@
 #
 # GDC-aligned benchmark harness for graph databases over QUIC + TLS 1.3
 #
-# Dependencies are resolved via build.zig.zon git URLs (no manual cloning).
+# This project depends on geode-client-zig which is cloned during CI setup.
+# The build.zig.zon uses a relative path (../../geode-client-zig) which CI
+# resolves by cloning the dependency to the correct location.
 #
 # Pipeline stages:
 #   1. lint     - Code formatting checks
@@ -86,12 +88,23 @@ include:
   image: "ubuntu:24.04"
   variables:
     ZIG_VERSION: "0.15.1"
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "1"
   cache:
     key: "linux-zig-${ZIG_VERSION}"
     paths:
       - zig-${ZIG_VERSION}/
   before_script:
     - apt-get update && apt-get install -y curl xz-utils git libssl-dev
+    # Clone geode-client-zig dependency (relative path: ../../geode-client-zig)
+    - |
+      echo "Cloning geode-client-zig dependency..."
+      mkdir -p ../..
+      cd ../..
+      if [ ! -d "geode-client-zig" ]; then
+        git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/devnw/codepros/geode/geode-client-zig.git
+      fi
+      cd -
     # Install Zig
     - |
       if [ ! -f "zig-${ZIG_VERSION}/zig" ]; then
