@@ -125,8 +125,23 @@ From `build.zig.zon`:
 - `yaml` - YAML parser for benchmark packs
 - `quic`, `json`, `slog`, `strings` - Supporting libraries from gitlab.com/devnw/zig
 
+## CI/CD Pipeline
+
+GitLab CI pipeline runs on every push with stages: lint, build, test, integration, security, sbom, release.
+
+**Required Setup**: The `geode-client-zig` dependency must be accessible to CI. This is configured via CI job token allowlist (already set up) or a `GEODE_CLONE_TOKEN` variable.
+
+**Key Jobs**:
+- `zig-format` - Code formatting check
+- `build` - Debug build verification
+- `test` - Unit tests with coverage reporting
+- `integration-tests` - Benchmark against live Geode server (allow_failure)
+- Security scanning (SAST, secrets, gitleaks)
+- SBOM generation
+
 ## Known Limitations
 
 - Dataset loader in `loader.zig` is stubbed (use `scripts/load_finbench.sh` instead)
 - Parameter substitution (`$param` templates) supports limited built-in params: `$id`, `$src`, `$dst`, `$min_age`, `$name`, `$ts`, `$weight`
 - Sweep execution re-reads config for each point (doesn't preserve in-memory modifications)
+- Integration tests require access to private Geode container registry
