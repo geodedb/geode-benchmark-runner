@@ -1,0 +1,27 @@
+db:
+  host: 127.0.0.1
+  port: 3141
+  transport: quic_tls_insecure
+  timeout_ms: 60000
+
+workload:
+  benchpack: gdc_micro_primitives
+  mode: closed_loop
+  duration_sec: 10
+  workers: 1
+  in_flight_per_worker: 1
+  slo_ms: 100
+  violation_threshold: 0.05
+  error_threshold: 0.0
+
+dataset:
+  dataset_id: finbench_sf001
+  workdir: /tmp/finbench_prepared
+  auto_load: false
+  skip_load: false
+
+loader:
+  type: quic_gql_batch
+  batch_size: 50
+  insert_node_template: "CREATE (n:{{label}} {id: {{id}}{{props}}}) RETURN n"
+  insert_edge_template: "MATCH (a:{{src_label}} {id: {{src}}}), (b:{{dst_label}} {id: {{dst}}}) CREATE (a)-[:{{type}}{{props}}]->(b)"

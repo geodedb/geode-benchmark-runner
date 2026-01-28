@@ -1,0 +1,1 @@
+MATCH (p:Person) WHERE p.id = $personId RETURN p.firstName, p.lastName

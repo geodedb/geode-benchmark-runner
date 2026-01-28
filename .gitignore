@@ -1,0 +1,43 @@
+# Zig build artifacts
+zig-out/
+.zig-cache/
+zig-cache/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+
+# Test and benchmark results
+test_results/
+sweep_results/
+finbench_results/
+ci-results/
+test_run*/
+verify_run*/
+final_*/
+original_test/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Work directories
+work/
+
+# Coverage
+/coverage/
+/reports/

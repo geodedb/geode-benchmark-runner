@@ -1,0 +1,71 @@
+.{
+    .name = .graphbench,
+    .version = "0.2.0",
+    .fingerprint = 0xba90752dda55258f,
+    .minimum_zig_version = "0.15.1",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "examples",
+        "benchpacks",
+        "scripts",
+        "README.md",
+    },
+    .dependencies = .{
+        // Geode client library (QUIC-based graph database client)
+        .geode_client = .{
+            .path = "../../geode-client-zig",
+        },
+        // CLI framework (Cobra/Viper-class features)
+        .zig_cli = .{
+            .url = "git+https://gitlab.com/devnw/zig/cli.git#v0.1.1",
+            .hash = "cli-0.1.0-0aso9F-vBAAoH-0L84gQXM4-y2NC_HzjU3KLsGEfBea3",
+        },
+        // YAML parser (YAML 1.2.2 compliant)
+        .yaml = .{
+            .url = "git+https://gitlab.com/devnw/zig/yaml.git#v0.1.1",
+            .hash = "yaml-0.1.1-lcW-hBqKBADGkeBKGWHbUCuOt6YOX_RCgK7hB0hw5jx0",
+        },
+        // QUIC transport protocol (RFC 9000)
+        .quic = .{
+            .url = "git+https://gitlab.com/devnw/zig/quic.git#v0.1.7",
+            .hash = "quic-0.1.6-gBIqUUj9OQAmLo1o3dSO-QlcAzjxqrlFrPjmqaV6m_II",
+        },
+        // TLS 1.3 cryptographic implementation
+        .tls = .{
+            .url = "git+https://gitlab.com/devnw/zig/tls.git#8c511791b85349fc6b4c07ba6309e754c720c68e",
+            .hash = "tls-0.1.0-mtEaLEtsEQAcNcPqUq9or5b7zwp9seF_JIhc74uLLvBz",
+        },
+        // DNS resolution library
+        .dns = .{
+            .url = "git+https://gitlab.com/devnw/zig/dns.git#d7b914b83af2f431d9e5e9ff3d0acc3c1b19fc8a",
+            .hash = "dns-0.1.0-x4U-zYgMCwDlLjH2DUzIcVIqEfCj5x_2yGKIWFaiFJLA",
+        },
+        // JSON parsing and serialization
+        .json = .{
+            .url = "git+https://gitlab.com/devnw/zig/json.git#2048a73e275b6242b6799469b4553a798fdcad20",
+            .hash = "json-0.1.0-tOue4WZ_CwDmY9dvdVfuFN_LcZZs6XcHmnQqkvsqdNCM",
+        },
+        // Multi-format configuration (YAML, TOML, JSON)
+        .config = .{
+            .url = "git+https://gitlab.com/devnw/zig/config.git#5ffb0e4bd95d8106fad6f66374145c796206d17b",
+            .hash = "config-0.1.0-TiLumiKJBQDP5bfj9FFnfZB8unOVJZGv6eMQVN5_eUNH",
+        },
+        // Structured logging with JSON output
+        .slog = .{
+            .url = "git+https://gitlab.com/devnw/zig/slog.git#v0.1.1",
+            .hash = "slog-0.1.0-SamED67fAwDghixIpZN48hgYrnT4CS8zcn4VcEN5jm67",
+        },
+        // URI parsing (RFC 3986/3987)
+        .uri = .{
+            .url = "git+https://gitlab.com/devnw/zig/uri.git#ecbe05857577799a283464b52724de979f6b7b30",
+            .hash = "uri-0.1.0-zVvOsXZLAQAfg1wUuvR2yQC3FLtQPAV85R2aS6EFiaZn",
+        },
+        // String manipulation utilities
+        .strings = .{
+            .url = "git+https://gitlab.com/devnw/zig/strings.git#635377eb637a84f5a956acec6c63d277c7a5d133",
+            .hash = "strings-0.1.0-adMOtbd1HABrved9iMt4lKxtonWX5dKNIWrdaWc2B5mo",
+        },
+    },
+}

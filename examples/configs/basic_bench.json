@@ -1,0 +1,26 @@
+{
+  "db": {
+    "host": "127.0.0.1",
+    "port": 9876,
+    "transport": "quic_tls_strict",
+    "auth_token_env": "MYDB_TOKEN",
+    "timeout_ms": 30000
+  },
+  "scenario": {
+    "network_mode": "loopback",
+    "durability": "fsync",
+    "consistency": "serializable",
+    "cache_state": "warm",
+    "db_version": "1.0.0"
+  },
+  "workload": {
+    "benchpack": "gdc_micro_primitives",
+    "mode": "closed_loop",
+    "duration_sec": 10,
+    "workers": 2,
+    "in_flight_per_worker": 5,
+    "slo_ms": 100,
+    "violation_threshold": 0.05,
+    "error_threshold": 0.0
+  }
+}

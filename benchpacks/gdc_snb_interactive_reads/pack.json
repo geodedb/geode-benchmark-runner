@@ -1,0 +1,12 @@
+{
+  "name": "GDC SNB Interactive Reads",
+  "operations": [
+    {
+      "name": "interactive_short_1",
+      "query_file": "is1.gql",
+      "params_file": "is1_params.csv",
+      "slo_ms": 100,
+      "weight": 1.0
+    }
+  ]
+}

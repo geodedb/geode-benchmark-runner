@@ -1,0 +1,14 @@
+db:
+  host: "127.0.0.1"
+  port: 3141
+  transport: "quic_tls_insecure"
+  timeout_ms: 5000
+
+workload:
+  benchpack: "verify_data"
+  slo_ms: 100
+  duration_sec: 5
+  workers: 1
+  in_flight_per_worker: 1
+  violation_threshold: 0.01
+  error_threshold: 0.001

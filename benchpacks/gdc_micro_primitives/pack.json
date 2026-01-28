@@ -1,0 +1,17 @@
+{
+  "name": "GDC Micro Primitives",
+  "operations": [
+    {
+      "name": "point_lookup",
+      "query_file": "point_lookup.gql",
+      "slo_ms": 50,
+      "weight": 1.0
+    },
+    {
+      "name": "k_hop_traversal",
+      "query_file": "k_hop_traversal.gql",
+      "slo_ms": 150,
+      "weight": 1.0
+    }
+  ]
+}

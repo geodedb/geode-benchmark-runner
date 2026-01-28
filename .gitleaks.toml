@@ -1,0 +1,25 @@
+# Gitleaks Configuration
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2024-2026 CodePros
+
+title = "Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''testdata''',
+  '''tests/.*''',
+  '''\.zig-cache''',
+  '''zig-out''',
+  '''vendor/.*''',
+  '''.*\.zig$''',
+  '''.*\.md$''',
+  '''.*\.log$''',
+  '''benchpacks/.*''',
+  '''examples/.*''',
+  '''test_results/.*''',
+  '''sweep_results/.*''',
+]

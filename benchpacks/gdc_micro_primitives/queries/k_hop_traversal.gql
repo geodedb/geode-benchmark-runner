@@ -1,0 +1,1 @@
+MATCH (start)-[*1..3]-(neighbor) WHERE id(start) = $startId RETURN neighbor LIMIT 100

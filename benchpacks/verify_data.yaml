@@ -1,0 +1,28 @@
+name: verify_data
+description: Queries that verify data is being retrieved
+
+operations:
+  - name: count_all_nodes
+    query: "MATCH (n) RETURN count(n) AS cnt"
+    weight: 1.0
+    slo_ms: 100
+
+  - name: get_all_persons
+    query: "MATCH (n:Person) RETURN n"
+    weight: 1.0
+    slo_ms: 100
+
+  - name: filter_by_age
+    query: "MATCH (n) WHERE n.age > 20 RETURN n"
+    weight: 1.0
+    slo_ms: 100
+
+  - name: get_relationships
+    query: "MATCH (a)-[r]->(b) RETURN a.name, type(r), b.name"
+    weight: 1.0
+    slo_ms: 100
+
+  - name: traversal_all
+    query: "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name LIMIT 10"
+    weight: 1.0
+    slo_ms: 100

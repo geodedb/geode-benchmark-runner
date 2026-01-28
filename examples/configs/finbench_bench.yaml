@@ -1,0 +1,22 @@
+db:
+  host: 127.0.0.1
+  port: 3141
+  transport: quic_tls_insecure
+  timeout_ms: 30000
+
+scenario:
+  network_mode: loopback
+  durability: fsync
+  consistency: serializable
+  cache_state: warm
+  db_version: "0.18.0"
+
+workload:
+  benchpack: ldbc_finbench
+  mode: closed_loop
+  duration_sec: 30
+  workers: 4
+  in_flight_per_worker: 5
+  slo_ms: 100
+  violation_threshold: 0.05
+  error_threshold: 0.0

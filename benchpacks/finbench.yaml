@@ -1,0 +1,69 @@
+name: finbench_queries
+version: "1.0"
+description: "LDBC FinBench benchmark queries for financial graph"
+tags:
+  - finbench
+  - ldbc
+  - financial
+  - graph
+
+queries:
+  - name: simple_read_1
+    description: "Find a person by ID"
+    query: "MATCH (p:Person {id: 755}) RETURN p.name, p.country"
+    weight: 10
+    category: read
+
+  - name: simple_read_2
+    description: "Find accounts owned by a person"
+    query: "MATCH (p:Person)-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 10"
+    weight: 15
+    category: read
+
+  - name: simple_read_3
+    description: "Find transfers from an account"
+    query: "MATCH (a1:Account)-[t:TRANSFER]->(a2:Account) RETURN a1.id, t.amount, a2.id LIMIT 10"
+    weight: 15
+    category: read
+
+  - name: complex_read_1
+    description: "Find all accounts owned by persons in a country"
+    query: "MATCH (p:Person {country: 'Australia'})-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 20"
+    weight: 10
+    category: read
+
+  - name: complex_read_2
+    description: "Find loan repayments"
+    query: "MATCH (a:Account)-[r:REPAY]->(l:Loan) RETURN a.id, r.amount, l.id LIMIT 10"
+    weight: 10
+    category: read
+
+  - name: complex_read_3
+    description: "Find companies a person invests in"
+    query: "MATCH (p:Person)-[i:INVEST]->(c:Company) RETURN p.name, i.ratio, c.name LIMIT 10"
+    weight: 10
+    category: read
+
+  - name: aggregation_1
+    description: "Count persons by country"
+    query: "MATCH (p:Person) WHERE p.country = 'Australia' RETURN count(p) as count"
+    weight: 10
+    category: aggregation
+
+  - name: aggregation_2
+    description: "Count accounts per person"
+    query: "MATCH (p:Person)-[:OWN]->(a:Account) RETURN p.name, count(a) as accounts LIMIT 10"
+    weight: 10
+    category: aggregation
+
+  - name: path_1
+    description: "2-hop transfer path"
+    query: "MATCH (a1:Account)-[:TRANSFER]->(a2:Account)-[:TRANSFER]->(a3:Account) RETURN a1.id, a2.id, a3.id LIMIT 5"
+    weight: 5
+    category: path
+
+  - name: path_2
+    description: "Guarantee chain"
+    query: "MATCH (p1:Person)-[:GUARANTEE]->(p2:Person) RETURN p1.name, p2.name LIMIT 10"
+    weight: 5
+    category: path
