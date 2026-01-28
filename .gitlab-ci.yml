@@ -4,9 +4,17 @@
 #
 # GDC-aligned benchmark harness for graph databases over QUIC + TLS 1.3
 #
-# This project depends on geode-client-zig which is cloned during CI setup.
-# The build.zig.zon uses a relative path (../../geode-client-zig) which CI
-# resolves by cloning the dependency to the correct location.
+# DEPENDENCY SETUP:
+# This project depends on geode-client-zig (relative path: ../../geode-client-zig).
+# For CI to work, one of these must be configured:
+#
+# Option 1 (Recommended): Enable CI job token access
+#   In geode-client-zig project settings:
+#   Settings > CI/CD > Token Access > Add "geode-benchmark-runner" to allowlist
+#
+# Option 2: Use a deploy token
+#   Set CI/CD variable GEODE_CLONE_TOKEN with a token that has read access
+#   to geode-client-zig repository
 #
 # Pipeline stages:
 #   1. lint     - Code formatting checks
@@ -102,7 +110,14 @@ include:
       mkdir -p ../..
       cd ../..
       if [ ! -d "geode-client-zig" ]; then
-        git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/devnw/codepros/geode/geode-client-zig.git
+        # Use GEODE_CLONE_TOKEN if set, otherwise fall back to CI_JOB_TOKEN
+        if [ -n "${GEODE_CLONE_TOKEN}" ]; then
+          echo "Using GEODE_CLONE_TOKEN for authentication"
+          git clone --depth 1 https://oauth2:${GEODE_CLONE_TOKEN}@gitlab.com/devnw/codepros/geode/geode-client-zig.git
+        else
+          echo "Using CI_JOB_TOKEN for authentication (requires project token access to be configured)"
+          git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/devnw/codepros/geode/geode-client-zig.git
+        fi
       fi
       cd -
     # Install Zig
