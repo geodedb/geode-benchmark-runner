@@ -167,7 +167,7 @@ GitLab CI pipeline runs on every push with stages: lint, build, test, integratio
 
 ## Known Limitations
 
-- Dataset loader in `loader.zig` is stubbed (use `scripts/load_finbench.sh` instead)
 - Parameterized queries support limited built-in params: `$id`, `$src`, `$dst`, `$min_age`, `$name`, `$ts`, `$weight`
 - Sweep execution re-reads config for each point (doesn't preserve in-memory modifications)
 - Integration tests require access to private Geode container registry
+- Open-loop (arrival-rate based) workload mode is not yet implemented

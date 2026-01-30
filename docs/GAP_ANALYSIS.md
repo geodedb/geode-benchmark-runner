@@ -1,6 +1,6 @@
 # Gap Analysis - graphbench
 
-**Generated**: 2026-01-29
+**Generated**: 2026-01-30
 **Source of Truth**: [GitLab Issues](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues)
 
 This document tracks open gaps between requirements and implementation. For resolved gaps, see [GAP_ANALYSIS_RESOLVED.md](./GAP_ANALYSIS_RESOLVED.md).
@@ -9,90 +9,54 @@ This document tracks open gaps between requirements and implementation. For reso
 
 | Priority | Count | Status |
 |----------|-------|--------|
-| High     | 2     | Open   |
-| Medium   | 4     | Open   |
-| Low      | 3     | Open   |
-| **Total**| **9** | Open   |
+| Medium   | 1     | Blocked |
+| Low      | 1     | Blocked |
+| **Total**| **2** | Blocked |
 
-## Open Gaps
+All actionable gaps have been closed. The remaining 2 gaps are explicitly blocked pending infrastructure or architectural changes.
 
-### High Priority
-
-#### GAP-0002: Comprehensive Unit Test Coverage
-
-- **Issue**: [#2](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/2)
-- **Type**: Quality
-- **Component**: src/
-- **Description**: Currently only `src/benchpack.zig` has embedded unit tests. Other core modules (config.zig, driver.zig, runner.zig, stats.zig, output.zig, dataset.zig, loader.zig) lack test coverage.
-- **Impact**: Reduced code quality and maintainability
-
-#### GAP-0008: Update README - Remove Outdated Known Limitations
-
-- **Issue**: [#8](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/8)
-- **Type**: Documentation
-- **Component**: README.md, STATUS.md
-- **Description**: Documentation contains outdated claims about features being "stubbed" or having "only 2 queries" when they're actually implemented.
-- **Impact**: Misleading documentation for users and contributors
+## Blocked Gaps
 
 ### Medium Priority
 
-#### GAP-0001: Debug Build - bufferedReader API Compatibility
-
-- **Issue**: [#1](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/1)
-- **Type**: Technical Debt
-- **Component**: src/loader.zig, src/dataset.zig
-- **Description**: Uses `deprecatedReader()` workaround for Zig 0.15.2 bufferedReader API changes.
-- **Impact**: Debug builds may have issues; using deprecated API
-
-#### GAP-0003: Dataset Verification Implementation
-
-- **Issue**: [#3](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/3)
-- **Type**: Feature
-- **Component**: src/dataset.zig
-- **Description**: `verifyDataset()` only reads stats.json and counts files; doesn't verify actual data integrity.
-- **Impact**: Cannot validate dataset correctness after preparation
-
-#### GAP-0007: Results Comparison/Regression Detection
-
-- **Issue**: [#7](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/7)
-- **Type**: Feature
-- **Component**: src/output.zig, src/main.zig
-- **Description**: No way to compare benchmark results between runs for performance regression detection.
-- **Impact**: Manual comparison required; no automated regression detection
-
-#### GAP-0009: Integration Test Reliability
+#### GAP-0009: Integration Test Reliability (BLOCKED)
 
 - **Issue**: [#9](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/9)
 - **Type**: CI/CD
 - **Component**: .gitlab-ci.yml
 - **Description**: Integration tests configured with `allow_failure: true`, meaning they don't block the pipeline.
 - **Impact**: Integration regressions may go unnoticed
+- **Status**: **BLOCKED**
+- **Blocker**: The `allow_failure: true` is intentional because:
+  - The Geode container registry (`registry.gitlab.com/devnw/geode/geode:latest`) may not be accessible to all CI runners
+  - The Geode service may not start reliably in CI environment
+  - Removing this flag would cause all CI runs to fail when infrastructure is unavailable
+- **Unblock Steps**:
+  1. Ensure Geode container image is reliably available in GitLab container registry
+  2. Configure CI runners with appropriate access to pull the image
+  3. Add health checks and retry logic for Geode service startup
+  4. Gradually transition to `allow_failure: false` after stability is confirmed
 
 ### Low Priority
 
-#### GAP-0004: FinBench Queries Should Use Parameterized Values
-
-- **Issue**: [#4](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/4)
-- **Type**: Enhancement
-- **Component**: src/benchpack.zig
-- **Description**: FinBench benchmark pack uses hardcoded values (e.g., `id: 755`) instead of `$param` placeholders.
-- **Impact**: Less flexible benchmark execution; queries not representative of real workloads
-
-#### GAP-0005: Open-Loop Workload Mode Not Implemented
+#### GAP-0005: Open-Loop Workload Mode Not Implemented (BLOCKED)
 
 - **Issue**: [#5](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/5)
 - **Type**: Feature
 - **Component**: src/runner.zig, src/config.zig
 - **Description**: Config supports `open_loop` mode but only closed-loop execution is implemented.
 - **Impact**: Cannot test system behavior under arrival-rate based load
-
-#### GAP-0006: Custom Benchpack Documentation
-
-- **Issue**: [#6](https://gitlab.com/devnw/codepros/geode/geode-benchmark-runner/-/issues/6)
-- **Type**: Documentation
-- **Component**: docs/
-- **Description**: No documentation on custom benchpack YAML/JSON file format.
-- **Impact**: Users cannot easily create custom benchmark packs
+- **Status**: **BLOCKED**
+- **Blocker**: Implementing open-loop (arrival-rate based) load generation requires significant architectural changes:
+  - Poisson or uniform arrival rate scheduler
+  - Request queuing to decouple submission from completion
+  - Backpressure handling when target QPS exceeds capacity
+  - Separate measurement of queuing delay vs service time
+- **Unblock Steps**:
+  1. Design the open-loop scheduling architecture
+  2. Implement a separate scheduler module for arrival-rate control
+  3. Add queue depth tracking and backpressure metrics
+  4. Create dedicated MR with proper design review and testing
 
 ## Gap Analysis Methodology
 

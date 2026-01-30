@@ -10,43 +10,43 @@ tags:
 queries:
 - name: simple_read_1
   description: Find a person by ID
-  query: 'MATCH (p:Person {id: 755}) RETURN p.name, p.country'
+  query: 'MATCH (p:Person {id: $id}) RETURN p.name, p.country'
   weight: 10
   category: read
 
 - name: simple_read_2
   description: Find accounts owned by a person
-  query: MATCH (p:Person)-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 10
+  query: 'MATCH (p:Person {id: $id})-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 10'
   weight: 15
   category: read
 
 - name: simple_read_3
   description: Find transfers from an account
-  query: MATCH (a1:Account)-[t:TRANSFER]->(a2:Account) RETURN a1.id, t.amount, a2.id LIMIT 10
+  query: 'MATCH (a1:Account {id: $id})-[t:TRANSFER]->(a2:Account) RETURN a1.id, t.amount, a2.id LIMIT 10'
   weight: 15
   category: read
 
 - name: complex_read_1
   description: Find all accounts owned by persons in a country
-  query: "MATCH (p:Person {country: 'Australia'})-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 20"
+  query: "MATCH (p:Person {country: $name})-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 20"
   weight: 10
   category: read
 
 - name: complex_read_2
   description: Find loan repayments
-  query: MATCH (a:Account)-[r:REPAY]->(l:Loan) RETURN a.id, r.amount, l.id LIMIT 10
+  query: 'MATCH (a:Account {id: $id})-[r:REPAY]->(l:Loan) RETURN a.id, r.amount, l.id LIMIT 10'
   weight: 10
   category: read
 
 - name: complex_read_3
   description: Find companies a person invests in
-  query: MATCH (p:Person)-[i:INVEST]->(c:Company) RETURN p.name, i.ratio, c.name LIMIT 10
+  query: 'MATCH (p:Person {id: $id})-[i:INVEST]->(c:Company) RETURN p.name, i.ratio, c.name LIMIT 10'
   weight: 10
   category: read
 
 - name: aggregation_1
   description: Count persons by country
-  query: MATCH (p:Person) WHERE p.country = 'Australia' RETURN count(p) as count
+  query: "MATCH (p:Person) WHERE p.country = $name RETURN count(p) as count"
   weight: 10
   category: aggregation
 

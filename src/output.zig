@@ -209,3 +209,476 @@ pub fn writeSweepResults(
 
     try file.writeAll(content);
 }
+
+/// Compare two benchmark result files and return comparison data
+pub const CompareResult = struct {
+    baseline_qps: f64,
+    current_qps: f64,
+    qps_change_pct: f64,
+    baseline_p95: f64,
+    current_p95: f64,
+    p95_change_pct: f64,
+    regression_detected: bool,
+
+    pub fn format(self: CompareResult, allocator: std.mem.Allocator) ![]const u8 {
+        const qps_direction: []const u8 = if (self.qps_change_pct >= 0) "+" else "";
+        const p95_direction: []const u8 = if (self.p95_change_pct >= 0) "+" else "";
+
+        return std.fmt.allocPrint(allocator,
+            \\Benchmark Comparison
+            \\====================
+            \\
+            \\QPS: {d:.2} -> {d:.2} ({s}{d:.1}%)
+            \\p95: {d:.2}ms -> {d:.2}ms ({s}{d:.1}%)
+            \\
+            \\Regression: {}
+            \\
+        , .{
+            self.baseline_qps,
+            self.current_qps,
+            qps_direction,
+            self.qps_change_pct,
+            self.baseline_p95,
+            self.current_p95,
+            p95_direction,
+            self.p95_change_pct,
+            self.regression_detected,
+        });
+    }
+};
+
+pub fn compareResults(
+    allocator: std.mem.Allocator,
+    baseline_path: []const u8,
+    current_path: []const u8,
+    regression_threshold_pct: f64,
+) !CompareResult {
+    // Read baseline result
+    const baseline_file = try std.fs.cwd().openFile(baseline_path, .{});
+    defer baseline_file.close();
+    const baseline_content = try baseline_file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(baseline_content);
+
+    const baseline_parsed = try std.json.parseFromSlice(std.json.Value, allocator, baseline_content, .{});
+    defer baseline_parsed.deinit();
+
+    // Read current result
+    const current_file = try std.fs.cwd().openFile(current_path, .{});
+    defer current_file.close();
+    const current_content = try current_file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(current_content);
+
+    const current_parsed = try std.json.parseFromSlice(std.json.Value, allocator, current_content, .{});
+    defer current_parsed.deinit();
+
+    // Extract metrics
+    const baseline_qps = baseline_parsed.value.object.get("qps").?.float;
+    const current_qps = current_parsed.value.object.get("qps").?.float;
+
+    const baseline_latency = baseline_parsed.value.object.get("latency").?.object;
+    const current_latency = current_parsed.value.object.get("latency").?.object;
+
+    const baseline_p95 = baseline_latency.get("p95_ms").?.float;
+    const current_p95 = current_latency.get("p95_ms").?.float;
+
+    // Compute changes
+    const qps_change_pct = if (baseline_qps > 0)
+        ((current_qps - baseline_qps) / baseline_qps) * 100.0
+    else
+        0.0;
+
+    const p95_change_pct = if (baseline_p95 > 0)
+        ((current_p95 - baseline_p95) / baseline_p95) * 100.0
+    else
+        0.0;
+
+    // Detect regression: QPS dropped significantly or p95 increased significantly
+    const regression_detected = (qps_change_pct < -regression_threshold_pct) or
+        (p95_change_pct > regression_threshold_pct);
+
+    return CompareResult{
+        .baseline_qps = baseline_qps,
+        .current_qps = current_qps,
+        .qps_change_pct = qps_change_pct,
+        .baseline_p95 = baseline_p95,
+        .current_p95 = current_p95,
+        .p95_change_pct = p95_change_pct,
+        .regression_detected = regression_detected,
+    };
+}
+
+// Unit Tests
+
+fn createTestConfig(allocator: std.mem.Allocator) config.BenchConfig {
+    return config.BenchConfig{
+        .allocator = allocator,
+        .db = config.DbConfig{
+            .host = allocator.dupe(u8, "localhost") catch unreachable,
+            .port = 3141,
+            .transport = .quic_tls_insecure,
+            .auth_token_env = null,
+            .timeout_ms = 30000,
+        },
+        .scenario = config.ScenarioConfig{
+            .network_mode = .loopback,
+            .netem = null,
+            .durability = allocator.dupe(u8, "fsync") catch unreachable,
+            .consistency = allocator.dupe(u8, "serializable") catch unreachable,
+            .cache_state = allocator.dupe(u8, "warm") catch unreachable,
+            .db_version = allocator.dupe(u8, "0.1.0") catch unreachable,
+        },
+        .workload = config.WorkloadConfig{
+            .benchpack = allocator.dupe(u8, "gdc_micro_primitives") catch unreachable,
+            .mode = .closed_loop,
+            .duration_sec = 10,
+            .target_qps = null,
+            .workers = 2,
+            .in_flight_per_worker = 1,
+            .slo_ms = 100,
+            .violation_threshold = 0.05,
+            .error_threshold = 0.0,
+        },
+        .dataset = null,
+        .loader = null,
+    };
+}
+
+fn createTestMetrics() stats.RunMetrics {
+    return stats.RunMetrics{
+        .qps = 1000.0,
+        .latency = stats.Percentiles{
+            .p50 = 10.0,
+            .p95 = 50.0,
+            .p99 = 80.0,
+            .p999 = 95.0,
+            .min = 5.0,
+            .max = 100.0,
+            .mean = 25.0,
+        },
+        .error_rate = 0.001,
+        .violation_rate = 0.02,
+        .tail_amplification = 8.0,
+        .qps_ceiling_est_from_p50 = 2000.0,
+        .required_in_flight = 10.0,
+    };
+}
+
+test "writeResults - creates valid JSON" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_output";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    var cfg = createTestConfig(allocator);
+    defer cfg.deinit();
+
+    const metrics = createTestMetrics();
+    const validity = stats.ValidityCheck{
+        .is_valid = true,
+        .reasons = &[_][]const u8{},
+    };
+
+    try writeResults(allocator, tmp_dir, cfg, metrics, validity);
+
+    // Read and verify the file
+    const result_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "result.json" });
+    defer allocator.free(result_path);
+
+    const file = try std.fs.cwd().openFile(result_path, .{});
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    // Verify it's valid JSON
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
+    defer parsed.deinit();
+
+    // Verify some fields
+    try std.testing.expectApproxEqAbs(@as(f64, 1000.0), parsed.value.object.get("qps").?.float, 0.1);
+    try std.testing.expect(parsed.value.object.get("valid").?.bool);
+}
+
+test "writeMeta - creates valid JSON" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_meta";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    var cfg = createTestConfig(allocator);
+    defer cfg.deinit();
+
+    try writeMeta(allocator, tmp_dir, cfg);
+
+    // Read and verify
+    const meta_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "meta.json" });
+    defer allocator.free(meta_path);
+
+    const file = try std.fs.cwd().openFile(meta_path, .{});
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("loopback", parsed.value.object.get("network_mode").?.string);
+    try std.testing.expectEqualStrings("quic_tls_insecure", parsed.value.object.get("transport").?.string);
+}
+
+test "writeSummary - creates markdown file" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_summary";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    var cfg = createTestConfig(allocator);
+    defer cfg.deinit();
+
+    const metrics = createTestMetrics();
+    const validity = stats.ValidityCheck{
+        .is_valid = true,
+        .reasons = &[_][]const u8{},
+    };
+
+    try writeSummary(allocator, tmp_dir, cfg, metrics, validity);
+
+    // Read and verify
+    const summary_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "summary.md" });
+    defer allocator.free(summary_path);
+
+    const file = try std.fs.cwd().openFile(summary_path, .{});
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    // Verify it contains expected markdown content
+    try std.testing.expect(std.mem.indexOf(u8, content, "# Benchmark Summary") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "## Configuration") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "## Results") != null);
+}
+
+test "writeSweepResults - creates valid JSON" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_sweep";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    try writeSweepResults(allocator, tmp_dir, 10, 1500.0);
+
+    // Read and verify
+    const sweep_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "sweep.json" });
+    defer allocator.free(sweep_path);
+
+    const file = try std.fs.cwd().openFile(sweep_path, .{});
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
+    defer parsed.deinit();
+
+    try std.testing.expectEqual(@as(i64, 10), parsed.value.object.get("best_value").?.integer);
+    try std.testing.expectApproxEqAbs(@as(f64, 1500.0), parsed.value.object.get("best_qps").?.float, 0.1);
+}
+
+test "compareResults - detects regression" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_compare";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    // Create baseline result
+    const baseline_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "baseline.json" });
+    defer allocator.free(baseline_path);
+
+    const baseline_content =
+        \\{
+        \\  "qps": 1000.00,
+        \\  "latency": {
+        \\    "p50_ms": 10.00,
+        \\    "p95_ms": 50.00,
+        \\    "p99_ms": 80.00,
+        \\    "p999_ms": 95.00,
+        \\    "min_ms": 5.00,
+        \\    "max_ms": 100.00,
+        \\    "mean_ms": 25.00
+        \\  },
+        \\  "error_rate": 0.0,
+        \\  "violation_rate": 0.0,
+        \\  "tail_amplification": 8.0,
+        \\  "qps_ceiling_est_from_p50": 2000.0,
+        \\  "required_in_flight": 10.0,
+        \\  "valid": true,
+        \\  "slo_ms": 100
+        \\}
+    ;
+
+    const baseline_file = try std.fs.cwd().createFile(baseline_path, .{});
+    try baseline_file.writeAll(baseline_content);
+    baseline_file.close();
+
+    // Create current result with regression (lower QPS, higher p95)
+    const current_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "current.json" });
+    defer allocator.free(current_path);
+
+    const current_content =
+        \\{
+        \\  "qps": 800.00,
+        \\  "latency": {
+        \\    "p50_ms": 15.00,
+        \\    "p95_ms": 75.00,
+        \\    "p99_ms": 120.00,
+        \\    "p999_ms": 150.00,
+        \\    "min_ms": 8.00,
+        \\    "max_ms": 200.00,
+        \\    "mean_ms": 35.00
+        \\  },
+        \\  "error_rate": 0.01,
+        \\  "violation_rate": 0.05,
+        \\  "tail_amplification": 8.0,
+        \\  "qps_ceiling_est_from_p50": 1600.0,
+        \\  "required_in_flight": 12.0,
+        \\  "valid": false,
+        \\  "slo_ms": 100
+        \\}
+    ;
+
+    const current_file = try std.fs.cwd().createFile(current_path, .{});
+    try current_file.writeAll(current_content);
+    current_file.close();
+
+    // Compare with 10% threshold
+    const result = try compareResults(allocator, baseline_path, current_path, 10.0);
+
+    try std.testing.expectApproxEqAbs(@as(f64, 1000.0), result.baseline_qps, 0.1);
+    try std.testing.expectApproxEqAbs(@as(f64, 800.0), result.current_qps, 0.1);
+    try std.testing.expectApproxEqAbs(@as(f64, -20.0), result.qps_change_pct, 0.1);
+    try std.testing.expect(result.regression_detected);
+}
+
+test "compareResults - no regression" {
+    const allocator = std.testing.allocator;
+
+    // Create temp directory
+    const tmp_dir = "/tmp/graphbench_test_compare2";
+    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+
+    // Create baseline result
+    const baseline_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "baseline.json" });
+    defer allocator.free(baseline_path);
+
+    const baseline_content =
+        \\{
+        \\  "qps": 1000.00,
+        \\  "latency": {
+        \\    "p50_ms": 10.00,
+        \\    "p95_ms": 50.00,
+        \\    "p99_ms": 80.00,
+        \\    "p999_ms": 95.00,
+        \\    "min_ms": 5.00,
+        \\    "max_ms": 100.00,
+        \\    "mean_ms": 25.00
+        \\  },
+        \\  "error_rate": 0.0,
+        \\  "violation_rate": 0.0,
+        \\  "tail_amplification": 8.0,
+        \\  "qps_ceiling_est_from_p50": 2000.0,
+        \\  "required_in_flight": 10.0,
+        \\  "valid": true,
+        \\  "slo_ms": 100
+        \\}
+    ;
+
+    const baseline_file = try std.fs.cwd().createFile(baseline_path, .{});
+    try baseline_file.writeAll(baseline_content);
+    baseline_file.close();
+
+    // Create current result with improvement
+    const current_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "current.json" });
+    defer allocator.free(current_path);
+
+    const current_content =
+        \\{
+        \\  "qps": 1100.00,
+        \\  "latency": {
+        \\    "p50_ms": 9.00,
+        \\    "p95_ms": 45.00,
+        \\    "p99_ms": 70.00,
+        \\    "p999_ms": 85.00,
+        \\    "min_ms": 4.00,
+        \\    "max_ms": 90.00,
+        \\    "mean_ms": 22.00
+        \\  },
+        \\  "error_rate": 0.0,
+        \\  "violation_rate": 0.0,
+        \\  "tail_amplification": 7.8,
+        \\  "qps_ceiling_est_from_p50": 2200.0,
+        \\  "required_in_flight": 9.9,
+        \\  "valid": true,
+        \\  "slo_ms": 100
+        \\}
+    ;
+
+    const current_file = try std.fs.cwd().createFile(current_path, .{});
+    try current_file.writeAll(current_content);
+    current_file.close();
+
+    // Compare with 10% threshold
+    const result = try compareResults(allocator, baseline_path, current_path, 10.0);
+
+    try std.testing.expectApproxEqAbs(@as(f64, 10.0), result.qps_change_pct, 0.1);
+    try std.testing.expect(!result.regression_detected);
+}
+
+test "CompareResult.format - generates readable output" {
+    const allocator = std.testing.allocator;
+
+    const result = CompareResult{
+        .baseline_qps = 1000.0,
+        .current_qps = 900.0,
+        .qps_change_pct = -10.0,
+        .baseline_p95 = 50.0,
+        .current_p95 = 60.0,
+        .p95_change_pct = 20.0,
+        .regression_detected = true,
+    };
+
+    const formatted = try result.format(allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "Benchmark Comparison") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "Regression: true") != null);
+}

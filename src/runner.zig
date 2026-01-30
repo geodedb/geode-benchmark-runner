@@ -450,3 +450,157 @@ pub fn executeSweep(
     // Write sweep.json
     try output.writeSweepResults(allocator, out_dir, best_value, best_qps);
 }
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+test "selectOperation - single operation" {
+    var rng = std.Random.DefaultPrng.init(12345);
+
+    const ops = [_]benchpack.BenchPack.Operation{
+        .{ .name = "op1", .query = "MATCH (n) RETURN n", .weight = 1.0, .slo_ms = 100, .params = null },
+    };
+
+    // With only one operation, should always return 0
+    const idx = selectOperation(&ops, &rng);
+    try std.testing.expectEqual(@as(usize, 0), idx);
+}
+
+test "selectOperation - weighted selection" {
+    var rng = std.Random.DefaultPrng.init(42);
+
+    const ops = [_]benchpack.BenchPack.Operation{
+        .{ .name = "heavy", .query = "Q1", .weight = 100.0, .slo_ms = 100, .params = null },
+        .{ .name = "light", .query = "Q2", .weight = 1.0, .slo_ms = 100, .params = null },
+    };
+
+    // Run multiple times and count selections
+    var heavy_count: usize = 0;
+    var light_count: usize = 0;
+
+    for (0..100) |_| {
+        const idx = selectOperation(&ops, &rng);
+        if (idx == 0) {
+            heavy_count += 1;
+        } else {
+            light_count += 1;
+        }
+    }
+
+    // Heavy should be selected much more often (~99x vs 1x)
+    try std.testing.expect(heavy_count > light_count * 5);
+}
+
+test "buildQueryParams - no parameters" {
+    const allocator = std.testing.allocator;
+    var rng = std.Random.DefaultPrng.init(999);
+
+    // Query without $placeholders
+    const params = try buildQueryParams(allocator, "MATCH (n) RETURN n", 1, &rng);
+    try std.testing.expect(params == null);
+}
+
+test "buildQueryParams - with id parameter" {
+    const allocator = std.testing.allocator;
+    var rng = std.Random.DefaultPrng.init(888);
+
+    var params = try buildQueryParams(allocator, "MATCH (n {id: $id}) RETURN n", 1, &rng);
+    try std.testing.expect(params != null);
+
+    if (params) |*p| {
+        defer freeJsonParams(allocator, p);
+        try std.testing.expect(p.* == .object);
+        try std.testing.expect(p.object.get("id") != null);
+    }
+}
+
+test "buildQueryParams - multiple parameters" {
+    const allocator = std.testing.allocator;
+    var rng = std.Random.DefaultPrng.init(777);
+
+    var params = try buildQueryParams(allocator, "MATCH (a {id: $src})-[]->(b {id: $dst}) RETURN a, b", 100, &rng);
+    try std.testing.expect(params != null);
+
+    if (params) |*p| {
+        defer freeJsonParams(allocator, p);
+        try std.testing.expect(p.object.get("src") != null);
+        try std.testing.expect(p.object.get("dst") != null);
+    }
+}
+
+test "buildQueryParams - name parameter generates string" {
+    const allocator = std.testing.allocator;
+    var rng = std.Random.DefaultPrng.init(666);
+
+    var params = try buildQueryParams(allocator, "MATCH (p {name: $name}) RETURN p", 42, &rng);
+    try std.testing.expect(params != null);
+
+    if (params) |*p| {
+        defer freeJsonParams(allocator, p);
+        const name_val = p.object.get("name");
+        try std.testing.expect(name_val != null);
+        try std.testing.expect(name_val.? == .string);
+    }
+}
+
+test "freeJsonParams - cleanup" {
+    const allocator = std.testing.allocator;
+
+    // Build params manually to test cleanup
+    var obj = std.json.ObjectMap.init(allocator);
+    const key = try allocator.dupe(u8, "test_key");
+    const str_val = try allocator.dupe(u8, "test_value");
+    try obj.put(key, .{ .string = str_val });
+
+    var params = std.json.Value{ .object = obj };
+
+    // This should free all memory without leaking
+    freeJsonParams(allocator, &params);
+}
+
+test "WorkerContext struct" {
+    const allocator = std.testing.allocator;
+
+    var latencies = std.ArrayList(f64){};
+    defer latencies.deinit(allocator);
+
+    var errors: u64 = 0;
+    var violations: u64 = 0;
+    var total_requests: u64 = 0;
+    var mutex = std.Thread.Mutex{};
+
+    const ops = [_]benchpack.BenchPack.Operation{};
+    const pack = benchpack.BenchPack{
+        .allocator = allocator,
+        .name = "test_pack",
+        .description = "Test",
+        .operations = &ops,
+    };
+
+    const db_cfg = config.DbConfig{
+        .host = "localhost",
+        .port = 3141,
+        .transport = .quic_tls_insecure,
+        .auth_token_env = null,
+        .timeout_ms = 5000,
+    };
+
+    const ctx = WorkerContext{
+        .allocator = allocator,
+        .worker_id = 1,
+        .db_config = db_cfg,
+        .pack = pack,
+        .slo_ms = 100,
+        .duration_ms = 1000,
+        .start_time = 0,
+        .latencies = &latencies,
+        .errors = &errors,
+        .violations = &violations,
+        .total_requests = &total_requests,
+        .mutex = &mutex,
+    };
+
+    try std.testing.expectEqual(@as(u32, 1), ctx.worker_id);
+    try std.testing.expectEqual(@as(u32, 100), ctx.slo_ms);
+}

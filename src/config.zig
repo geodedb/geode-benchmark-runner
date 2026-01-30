@@ -618,3 +618,231 @@ pub fn loadSweepConfig(allocator: std.mem.Allocator, path: []const u8) !SweepCon
         },
     };
 }
+
+// Unit Tests
+
+test "parseJsonConfig - minimal config" {
+    const allocator = std.testing.allocator;
+
+    const json_content =
+        \\{
+        \\  "db": {
+        \\    "host": "localhost",
+        \\    "port": 3141,
+        \\    "transport": "quic_tls_insecure",
+        \\    "timeout_ms": 30000
+        \\  },
+        \\  "scenario": {
+        \\    "network_mode": "loopback",
+        \\    "durability": "fsync",
+        \\    "consistency": "serializable",
+        \\    "cache_state": "warm",
+        \\    "db_version": "0.1.0"
+        \\  },
+        \\  "workload": {
+        \\    "benchpack": "gdc_micro_primitives",
+        \\    "mode": "closed_loop",
+        \\    "duration_sec": 10,
+        \\    "workers": 2,
+        \\    "slo_ms": 100,
+        \\    "violation_threshold": 0.05,
+        \\    "error_threshold": 0.0
+        \\  }
+        \\}
+    ;
+
+    var config_result = try parseJsonConfig(allocator, json_content);
+    defer config_result.deinit();
+
+    try std.testing.expectEqualStrings("localhost", config_result.db.host);
+    try std.testing.expectEqual(@as(u16, 3141), config_result.db.port);
+    try std.testing.expectEqual(TransportProfile.quic_tls_insecure, config_result.db.transport);
+    try std.testing.expectEqual(@as(u32, 30000), config_result.db.timeout_ms);
+    try std.testing.expectEqual(NetworkMode.loopback, config_result.scenario.network_mode);
+    try std.testing.expectEqualStrings("gdc_micro_primitives", config_result.workload.benchpack);
+    try std.testing.expectEqual(LoadMode.closed_loop, config_result.workload.mode);
+    try std.testing.expectEqual(@as(u32, 100), config_result.workload.slo_ms);
+}
+
+test "parseJsonConfig - strict transport" {
+    const allocator = std.testing.allocator;
+
+    const json_content =
+        \\{
+        \\  "db": {
+        \\    "host": "remote.server.com",
+        \\    "port": 8443,
+        \\    "transport": "quic_tls_strict",
+        \\    "timeout_ms": 60000
+        \\  },
+        \\  "scenario": {
+        \\    "network_mode": "remote",
+        \\    "durability": "async",
+        \\    "consistency": "eventual",
+        \\    "cache_state": "cold",
+        \\    "db_version": "1.0.0"
+        \\  },
+        \\  "workload": {
+        \\    "benchpack": "finbench",
+        \\    "mode": "open_loop",
+        \\    "target_qps": 1000,
+        \\    "slo_ms": 50,
+        \\    "violation_threshold": 0.01,
+        \\    "error_threshold": 0.001
+        \\  }
+        \\}
+    ;
+
+    var config_result = try parseJsonConfig(allocator, json_content);
+    defer config_result.deinit();
+
+    try std.testing.expectEqualStrings("remote.server.com", config_result.db.host);
+    try std.testing.expectEqual(@as(u16, 8443), config_result.db.port);
+    try std.testing.expectEqual(TransportProfile.quic_tls_strict, config_result.db.transport);
+    try std.testing.expectEqual(NetworkMode.remote, config_result.scenario.network_mode);
+    try std.testing.expectEqual(LoadMode.open_loop, config_result.workload.mode);
+    try std.testing.expectEqual(@as(?u32, 1000), config_result.workload.target_qps);
+}
+
+test "parseJsonConfig - with dataset config" {
+    const allocator = std.testing.allocator;
+
+    const json_content =
+        \\{
+        \\  "db": {
+        \\    "host": "127.0.0.1",
+        \\    "port": 3141,
+        \\    "transport": "quic_tls_insecure",
+        \\    "timeout_ms": 30000
+        \\  },
+        \\  "scenario": {
+        \\    "network_mode": "loopback",
+        \\    "durability": "fsync",
+        \\    "consistency": "serializable",
+        \\    "cache_state": "warm",
+        \\    "db_version": "0.1.0"
+        \\  },
+        \\  "workload": {
+        \\    "benchpack": "finbench",
+        \\    "mode": "closed_loop",
+        \\    "slo_ms": 100,
+        \\    "violation_threshold": 0.05,
+        \\    "error_threshold": 0.0
+        \\  },
+        \\  "dataset": {
+        \\    "dataset_id": "sf1",
+        \\    "workdir": "/tmp/work",
+        \\    "auto_load": true,
+        \\    "skip_load": false
+        \\  }
+        \\}
+    ;
+
+    var config_result = try parseJsonConfig(allocator, json_content);
+    defer config_result.deinit();
+
+    try std.testing.expect(config_result.dataset != null);
+    try std.testing.expectEqualStrings("sf1", config_result.dataset.?.dataset_id);
+    try std.testing.expectEqualStrings("/tmp/work", config_result.dataset.?.workdir);
+    try std.testing.expect(config_result.dataset.?.auto_load);
+    try std.testing.expect(!config_result.dataset.?.skip_load);
+}
+
+test "parseJsonConfig - with loader config" {
+    const allocator = std.testing.allocator;
+
+    const json_content =
+        \\{
+        \\  "db": {
+        \\    "host": "127.0.0.1",
+        \\    "port": 3141,
+        \\    "transport": "quic_tls_insecure",
+        \\    "timeout_ms": 30000
+        \\  },
+        \\  "scenario": {
+        \\    "network_mode": "loopback",
+        \\    "durability": "fsync",
+        \\    "consistency": "serializable",
+        \\    "cache_state": "warm",
+        \\    "db_version": "0.1.0"
+        \\  },
+        \\  "workload": {
+        \\    "benchpack": "custom",
+        \\    "mode": "closed_loop",
+        \\    "slo_ms": 100,
+        \\    "violation_threshold": 0.05,
+        \\    "error_threshold": 0.0
+        \\  },
+        \\  "loader": {
+        \\    "type": "quic_gql_batch",
+        \\    "batch_size": 500,
+        \\    "insert_node_template": "CREATE (n:Node {id: $id})",
+        \\    "insert_edge_template": "MATCH (a), (b) WHERE a.id = $src AND b.id = $dst CREATE (a)-[:EDGE]->(b)"
+        \\  }
+        \\}
+    ;
+
+    var config_result = try parseJsonConfig(allocator, json_content);
+    defer config_result.deinit();
+
+    try std.testing.expect(config_result.loader != null);
+    try std.testing.expectEqual(LoaderType.quic_gql_batch, config_result.loader.?.type);
+    try std.testing.expectEqual(@as(u32, 500), config_result.loader.?.batch_size);
+    try std.testing.expect(config_result.loader.?.insert_node_template != null);
+    try std.testing.expect(config_result.loader.?.insert_edge_template != null);
+}
+
+test "parseJsonConfig - netem network mode" {
+    const allocator = std.testing.allocator;
+
+    const json_content =
+        \\{
+        \\  "db": {
+        \\    "host": "127.0.0.1",
+        \\    "port": 3141,
+        \\    "transport": "quic_tls_insecure",
+        \\    "timeout_ms": 30000
+        \\  },
+        \\  "scenario": {
+        \\    "network_mode": "netem",
+        \\    "durability": "fsync",
+        \\    "consistency": "serializable",
+        \\    "cache_state": "warm",
+        \\    "db_version": "0.1.0"
+        \\  },
+        \\  "workload": {
+        \\    "benchpack": "gdc_micro_primitives",
+        \\    "mode": "closed_loop",
+        \\    "slo_ms": 100,
+        \\    "violation_threshold": 0.05,
+        \\    "error_threshold": 0.0
+        \\  }
+        \\}
+    ;
+
+    var config_result = try parseJsonConfig(allocator, json_content);
+    defer config_result.deinit();
+
+    try std.testing.expectEqual(NetworkMode.netem, config_result.scenario.network_mode);
+}
+
+test "TransportProfile enum values" {
+    try std.testing.expectEqualStrings("quic_tls_strict", @tagName(TransportProfile.quic_tls_strict));
+    try std.testing.expectEqualStrings("quic_tls_insecure", @tagName(TransportProfile.quic_tls_insecure));
+}
+
+test "NetworkMode enum values" {
+    try std.testing.expectEqualStrings("loopback", @tagName(NetworkMode.loopback));
+    try std.testing.expectEqualStrings("remote", @tagName(NetworkMode.remote));
+    try std.testing.expectEqualStrings("netem", @tagName(NetworkMode.netem));
+}
+
+test "LoadMode enum values" {
+    try std.testing.expectEqualStrings("closed_loop", @tagName(LoadMode.closed_loop));
+    try std.testing.expectEqualStrings("open_loop", @tagName(LoadMode.open_loop));
+}
+
+test "LoaderType enum values" {
+    try std.testing.expectEqualStrings("external", @tagName(LoaderType.external));
+    try std.testing.expectEqualStrings("quic_gql_batch", @tagName(LoaderType.quic_gql_batch));
+}

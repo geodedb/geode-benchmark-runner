@@ -226,15 +226,18 @@ fn processNodeFile(
     // Seek to end for appending
     try out_file.seekFromEnd(0);
 
+    // Read entire file content
+    const content = try in_file.readToEndAlloc(allocator, 100 * 1024 * 1024);
+    defer allocator.free(content);
+
     var count: u64 = 0;
-    const reader = in_file.deprecatedReader();
-    var line_buf: [8192]u8 = undefined;
+    var lines = std.mem.splitScalar(u8, content, '\n');
 
     // Skip header
-    _ = try reader.readUntilDelimiterOrEof(&line_buf, '\n');
+    _ = lines.next();
 
     // Process data lines
-    while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+    while (lines.next()) |line| {
         if (line.len == 0) continue;
 
         // Simple conversion: treat first field as ID
@@ -280,15 +283,18 @@ fn processEdgeFile(
 
     try out_file.seekFromEnd(0);
 
+    // Read entire file content
+    const content = try in_file.readToEndAlloc(allocator, 100 * 1024 * 1024);
+    defer allocator.free(content);
+
     var count: u64 = 0;
-    const reader = in_file.deprecatedReader();
-    var line_buf: [8192]u8 = undefined;
+    var lines = std.mem.splitScalar(u8, content, '\n');
 
     // Skip header
-    _ = try reader.readUntilDelimiterOrEof(&line_buf, '\n');
+    _ = lines.next();
 
     // Process data lines
-    while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+    while (lines.next()) |line| {
         if (line.len == 0) continue;
 
         var fields = std.mem.tokenizeScalar(u8, line, '|');
@@ -350,10 +356,15 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
         const in_file = try std.fs.cwd().openFile(dataset_path, .{});
         defer in_file.close();
 
-        const reader = in_file.deprecatedReader();
-        var line_buf: [1024]u8 = undefined;
+        // Read entire file content (Zig 0.15.2 compatible pattern)
+        const content = in_file.readToEndAlloc(allocator, 100 * 1024 * 1024) catch |err| {
+            std.debug.print("Error reading file: {}\n", .{err});
+            return err;
+        };
+        defer allocator.free(content);
 
-        while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+        var lines = std.mem.splitScalar(u8, content, '\n');
+        while (lines.next()) |line| {
             if (line.len == 0) continue;
             if (line[0] == '#') continue; // Skip comments
 
@@ -402,10 +413,15 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
             const in_file = try dir.openFile(entry.name, .{});
             defer in_file.close();
 
-            const reader = in_file.deprecatedReader();
-            var line_buf: [1024]u8 = undefined;
+            // Read entire file content (Zig 0.15.2 compatible pattern)
+            const dir_content = in_file.readToEndAlloc(allocator, 100 * 1024 * 1024) catch |err| {
+                std.debug.print("Error reading file: {}\n", .{err});
+                return err;
+            };
+            defer allocator.free(dir_content);
 
-            while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+            var dir_lines = std.mem.splitScalar(u8, dir_content, '\n');
+            while (dir_lines.next()) |line| {
                 if (line.len == 0) continue;
                 if (line[0] == '#') continue;
 
@@ -653,11 +669,17 @@ fn processFinBenchNodeFile(
     var out_file = try std.fs.cwd().createFile(out_filename, .{});
     defer out_file.close();
 
-    const reader = in_file.deprecatedReader();
-    var line_buf: [16384]u8 = undefined;
+    // Read entire file content (Zig 0.15.2 compatible pattern)
+    const content = in_file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+        std.debug.print("Error reading file: {}\n", .{err});
+        return err;
+    };
+    defer allocator.free(content);
+
+    var lines = std.mem.splitScalar(u8, content, '\n');
 
     // Read header to get column indices
-    const header_line = try reader.readUntilDelimiterOrEof(&line_buf, '\n') orelse return 0;
+    const header_line = lines.next() orelse return 0;
 
     // Build column name to index map (need to copy strings as buffer will be reused)
     var header_names = std.ArrayList([]const u8){};
@@ -695,7 +717,7 @@ fn processFinBenchNodeFile(
     var count: u64 = 0;
 
     // Process data lines
-    while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+    while (lines.next()) |line| {
         if (line.len == 0) continue;
 
         // Split into fields
@@ -777,11 +799,17 @@ fn processFinBenchEdgeFile(
     defer out_file.close();
     try out_file.seekFromEnd(0);
 
-    const reader = in_file.deprecatedReader();
-    var line_buf: [16384]u8 = undefined;
+    // Read entire file content (Zig 0.15.2 compatible pattern)
+    const content = in_file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+        std.debug.print("Error reading file: {}\n", .{err});
+        return err;
+    };
+    defer allocator.free(content);
 
-    // Read header and copy column names (buffer will be reused)
-    const header_line = try reader.readUntilDelimiterOrEof(&line_buf, '\n') orelse return 0;
+    var lines = std.mem.splitScalar(u8, content, '\n');
+
+    // Read header and copy column names
+    const header_line = lines.next() orelse return 0;
 
     var header_names = std.ArrayList([]const u8){};
     defer {
@@ -818,7 +846,7 @@ fn processFinBenchEdgeFile(
     var count: u64 = 0;
 
     // Process data lines
-    while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
+    while (lines.next()) |line| {
         if (line.len == 0) continue;
 
         var fields = std.ArrayList([]const u8){};
@@ -886,48 +914,99 @@ pub fn prepareParams(allocator: std.mem.Allocator, params_path: []const u8, out_
     std.debug.print("Parameter pack prepared\n", .{});
 }
 
+pub const VerificationResult = struct {
+    valid: bool,
+    expected_nodes: i64,
+    actual_nodes: u64,
+    expected_edges: i64,
+    actual_edges: u64,
+    node_files: u32,
+    edge_files: u32,
+    invalid_json_lines: u64,
+    errors: std.ArrayList([]const u8),
+
+    pub fn deinit(self: *VerificationResult, allocator: std.mem.Allocator) void {
+        for (self.errors.items) |err| {
+            allocator.free(err);
+        }
+        self.errors.deinit(allocator);
+    }
+};
+
 pub fn verifyDataset(
     allocator: std.mem.Allocator,
     config_path: []const u8,
     dataset_id: []const u8,
     workdir: []const u8,
 ) !void {
+    const result = try verifyDatasetDetailed(allocator, config_path, dataset_id, workdir);
+    var result_mut = result;
+    defer result_mut.deinit(allocator);
+
+    std.debug.print("Dataset verification complete\n", .{});
+    std.debug.print("  Valid: {}\n", .{result.valid});
+
+    if (!result.valid) {
+        for (result.errors.items) |err| {
+            std.debug.print("  ERROR: {s}\n", .{err});
+        }
+        return error.DatasetVerificationFailed;
+    }
+}
+
+pub fn verifyDatasetDetailed(
+    allocator: std.mem.Allocator,
+    config_path: []const u8,
+    dataset_id: []const u8,
+    workdir: []const u8,
+) !VerificationResult {
     std.debug.print("Verifying dataset: {s} in {s}\n", .{ dataset_id, workdir });
 
     _ = config_path;
+
+    var result = VerificationResult{
+        .valid = true,
+        .expected_nodes = 0,
+        .actual_nodes = 0,
+        .expected_edges = 0,
+        .actual_edges = 0,
+        .node_files = 0,
+        .edge_files = 0,
+        .invalid_json_lines = 0,
+        .errors = std.ArrayList([]const u8){},
+    };
 
     // Read stats.json
     const stats_path = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "stats.json" });
     defer allocator.free(stats_path);
 
     const stats_file = std.fs.cwd().openFile(stats_path, .{}) catch |err| {
-        std.debug.print("Cannot read stats.json: {}\n", .{err});
-        return err;
+        try result.errors.append(allocator, try std.fmt.allocPrint(allocator, "Cannot read stats.json: {}", .{err}));
+        result.valid = false;
+        return result;
     };
     defer stats_file.close();
 
     const stats_content = try stats_file.readToEndAlloc(allocator, 1024 * 1024);
     defer allocator.free(stats_content);
 
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, stats_content, .{});
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, stats_content, .{}) catch |err| {
+        try result.errors.append(allocator, try std.fmt.allocPrint(allocator, "Invalid JSON in stats.json: {}", .{err}));
+        result.valid = false;
+        return result;
+    };
     defer parsed.deinit();
 
-    const node_count = parsed.value.object.get("node_count").?.integer;
-    const edge_count = parsed.value.object.get("edge_count").?.integer;
+    result.expected_nodes = parsed.value.object.get("node_count").?.integer;
+    result.expected_edges = parsed.value.object.get("edge_count").?.integer;
 
-    std.debug.print("Dataset statistics:\n", .{});
-    std.debug.print("  Nodes: {d}\n", .{node_count});
-    std.debug.print("  Edges: {d}\n", .{edge_count});
+    std.debug.print("Expected statistics from stats.json:\n", .{});
+    std.debug.print("  Nodes: {d}\n", .{result.expected_nodes});
+    std.debug.print("  Edges: {d}\n", .{result.expected_edges});
 
-    // Verify files exist
+    // Count and verify nodes
     const nodes_dir = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "nodes" });
     defer allocator.free(nodes_dir);
-
-    const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "edges" });
-    defer allocator.free(edges_dir);
-
-    var nodes_files: u32 = 0;
-    var edges_files: u32 = 0;
 
     if (std.fs.cwd().openDir(nodes_dir, .{ .iterate = true })) |dir_val| {
         var dir = dir_val;
@@ -935,10 +1014,33 @@ pub fn verifyDataset(
         var iter = dir.iterate();
         while (try iter.next()) |entry| {
             if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".jsonl")) {
-                nodes_files += 1;
+                result.node_files += 1;
+
+                // Count and verify lines in the file
+                const file_path = try std.fs.path.join(allocator, &[_][]const u8{ nodes_dir, entry.name });
+                defer allocator.free(file_path);
+
+                const counts = try verifyJsonlFile(allocator, file_path);
+                result.actual_nodes += counts.valid_lines;
+                result.invalid_json_lines += counts.invalid_lines;
+
+                if (counts.invalid_lines > 0) {
+                    try result.errors.append(allocator, try std.fmt.allocPrint(
+                        allocator,
+                        "File {s} has {d} invalid JSON lines",
+                        .{ entry.name, counts.invalid_lines },
+                    ));
+                }
             }
         }
-    } else |_| {}
+    } else |_| {
+        try result.errors.append(allocator, try allocator.dupe(u8, "nodes/ directory not found"));
+        result.valid = false;
+    }
+
+    // Count and verify edges
+    const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "edges" });
+    defer allocator.free(edges_dir);
 
     if (std.fs.cwd().openDir(edges_dir, .{ .iterate = true })) |dir_val| {
         var dir = dir_val;
@@ -946,13 +1048,197 @@ pub fn verifyDataset(
         var iter = dir.iterate();
         while (try iter.next()) |entry| {
             if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".jsonl")) {
-                edges_files += 1;
+                result.edge_files += 1;
+
+                // Count and verify lines in the file
+                const file_path = try std.fs.path.join(allocator, &[_][]const u8{ edges_dir, entry.name });
+                defer allocator.free(file_path);
+
+                const counts = try verifyJsonlFile(allocator, file_path);
+                result.actual_edges += counts.valid_lines;
+                result.invalid_json_lines += counts.invalid_lines;
+
+                if (counts.invalid_lines > 0) {
+                    try result.errors.append(allocator, try std.fmt.allocPrint(
+                        allocator,
+                        "File {s} has {d} invalid JSON lines",
+                        .{ entry.name, counts.invalid_lines },
+                    ));
+                }
             }
         }
-    } else |_| {}
+    } else |_| {
+        try result.errors.append(allocator, try allocator.dupe(u8, "edges/ directory not found"));
+        result.valid = false;
+    }
 
-    std.debug.print("  Node files: {d}\n", .{nodes_files});
-    std.debug.print("  Edge files: {d}\n", .{edges_files});
+    std.debug.print("Actual counts from files:\n", .{});
+    std.debug.print("  Nodes: {d} (in {d} files)\n", .{ result.actual_nodes, result.node_files });
+    std.debug.print("  Edges: {d} (in {d} files)\n", .{ result.actual_edges, result.edge_files });
 
-    std.debug.print("Dataset verification complete\n", .{});
+    // Verify counts match
+    if (result.expected_nodes >= 0 and result.actual_nodes != @as(u64, @intCast(result.expected_nodes))) {
+        try result.errors.append(allocator, try std.fmt.allocPrint(
+            allocator,
+            "Node count mismatch: expected {d}, found {d}",
+            .{ result.expected_nodes, result.actual_nodes },
+        ));
+        result.valid = false;
+    }
+
+    if (result.expected_edges >= 0 and result.actual_edges != @as(u64, @intCast(result.expected_edges))) {
+        try result.errors.append(allocator, try std.fmt.allocPrint(
+            allocator,
+            "Edge count mismatch: expected {d}, found {d}",
+            .{ result.expected_edges, result.actual_edges },
+        ));
+        result.valid = false;
+    }
+
+    if (result.invalid_json_lines > 0) {
+        result.valid = false;
+    }
+
+    return result;
+}
+
+const JsonlFileCounts = struct {
+    valid_lines: u64,
+    invalid_lines: u64,
+};
+
+fn verifyJsonlFile(allocator: std.mem.Allocator, path: []const u8) !JsonlFileCounts {
+    var counts = JsonlFileCounts{
+        .valid_lines = 0,
+        .invalid_lines = 0,
+    };
+
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        std.debug.print("Cannot open file {s}: {}\n", .{ path, err });
+        return counts;
+    };
+    defer file.close();
+
+    const content = file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+        std.debug.print("Cannot read file {s}: {}\n", .{ path, err });
+        return counts;
+    };
+    defer allocator.free(content);
+
+    var lines = std.mem.splitScalar(u8, content, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        // Verify it's valid JSON
+        const parsed = std.json.parseFromSlice(std.json.Value, allocator, line, .{}) catch {
+            counts.invalid_lines += 1;
+            continue;
+        };
+        parsed.deinit();
+        counts.valid_lines += 1;
+    }
+
+    return counts;
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+test "DatasetType enum values" {
+    try std.testing.expectEqual(@as(usize, 4), @typeInfo(DatasetType).@"enum".fields.len);
+    try std.testing.expectEqual(DatasetType.auto, @as(DatasetType, .auto));
+    try std.testing.expectEqual(DatasetType.snb_csv, @as(DatasetType, .snb_csv));
+    try std.testing.expectEqual(DatasetType.graphalytics_edgelist, @as(DatasetType, .graphalytics_edgelist));
+    try std.testing.expectEqual(DatasetType.finbench, @as(DatasetType, .finbench));
+}
+
+test "Stats struct" {
+    const s = Stats{
+        .node_count = 1000,
+        .edge_count = 5000,
+    };
+
+    try std.testing.expectEqual(@as(u64, 1000), s.node_count);
+    try std.testing.expectEqual(@as(u64, 5000), s.edge_count);
+}
+
+test "Manifest struct" {
+    const labels = [_][]const u8{ "Person", "Account" };
+    const types = [_][]const u8{ "OWNS", "TRANSFER" };
+
+    const m = Manifest{
+        .dataset_id = "test_dataset",
+        .dataset_type = .finbench,
+        .source_file = "/path/to/data",
+        .node_labels = &labels,
+        .edge_types = &types,
+    };
+
+    try std.testing.expectEqualStrings("test_dataset", m.dataset_id);
+    try std.testing.expectEqual(DatasetType.finbench, m.dataset_type);
+    try std.testing.expectEqual(@as(usize, 2), m.node_labels.len);
+    try std.testing.expectEqual(@as(usize, 2), m.edge_types.len);
+}
+
+test "JsonlFileCounts struct" {
+    const counts = JsonlFileCounts{
+        .valid_lines = 100,
+        .invalid_lines = 5,
+    };
+
+    try std.testing.expectEqual(@as(u64, 100), counts.valid_lines);
+    try std.testing.expectEqual(@as(u64, 5), counts.invalid_lines);
+}
+
+test "VerificationResult struct" {
+    const allocator = std.testing.allocator;
+
+    var result = VerificationResult{
+        .valid = true,
+        .expected_nodes = 100,
+        .actual_nodes = 100,
+        .expected_edges = 200,
+        .actual_edges = 200,
+        .node_files = 2,
+        .edge_files = 3,
+        .invalid_json_lines = 0,
+        .errors = std.ArrayList([]const u8){},
+    };
+    defer result.deinit(allocator);
+
+    try std.testing.expect(result.valid);
+    try std.testing.expectEqual(@as(i64, 100), result.expected_nodes);
+    try std.testing.expectEqual(@as(u64, 100), result.actual_nodes);
+    try std.testing.expectEqual(@as(i64, 200), result.expected_edges);
+    try std.testing.expectEqual(@as(u64, 200), result.actual_edges);
+    try std.testing.expectEqual(@as(u32, 2), result.node_files);
+    try std.testing.expectEqual(@as(u32, 3), result.edge_files);
+    try std.testing.expectEqual(@as(u64, 0), result.invalid_json_lines);
+}
+
+test "VerificationResult with errors" {
+    const allocator = std.testing.allocator;
+
+    var result = VerificationResult{
+        .valid = false,
+        .expected_nodes = 100,
+        .actual_nodes = 95,
+        .expected_edges = 200,
+        .actual_edges = 200,
+        .node_files = 1,
+        .edge_files = 1,
+        .invalid_json_lines = 5,
+        .errors = std.ArrayList([]const u8){},
+    };
+
+    // Add an error message
+    const err_msg = try allocator.dupe(u8, "Node count mismatch");
+    try result.errors.append(allocator, err_msg);
+
+    defer result.deinit(allocator);
+
+    try std.testing.expect(!result.valid);
+    try std.testing.expectEqual(@as(usize, 1), result.errors.items.len);
+    try std.testing.expectEqualStrings("Node count mismatch", result.errors.items[0]);
 }

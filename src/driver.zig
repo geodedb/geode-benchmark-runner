@@ -278,3 +278,80 @@ pub const GeodeDriver = struct {
 
 // Legacy alias for backwards compatibility
 pub const QuicDriver = GeodeDriver;
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+test "QueryResult struct" {
+    const allocator = std.testing.allocator;
+
+    // Test successful result
+    var result = QueryResult{
+        .success = true,
+        .latency_ms = 5.5,
+        .error_message = null,
+        .result_data = try allocator.dupe(u8, "{\"data\": \"test\"}"),
+    };
+    defer result.deinit(allocator);
+
+    try std.testing.expect(result.success);
+    try std.testing.expectEqual(@as(f64, 5.5), result.latency_ms);
+    try std.testing.expect(result.error_message == null);
+    try std.testing.expect(result.result_data != null);
+}
+
+test "QueryResult with error" {
+    const allocator = std.testing.allocator;
+
+    var result = QueryResult{
+        .success = false,
+        .latency_ms = 10.0,
+        .error_message = try allocator.dupe(u8, "Connection timeout"),
+        .result_data = null,
+    };
+    defer result.deinit(allocator);
+
+    try std.testing.expect(!result.success);
+    try std.testing.expectEqualStrings("Connection timeout", result.error_message.?);
+    try std.testing.expect(result.result_data == null);
+}
+
+test "GeodeDriver init" {
+    const allocator = std.testing.allocator;
+
+    const db_cfg = config.DbConfig{
+        .host = "localhost",
+        .port = 3141,
+        .transport = .quic_tls_insecure,
+        .auth_token_env = null,
+        .timeout_ms = 5000,
+    };
+
+    var drv = GeodeDriver.init(allocator, db_cfg);
+    defer drv.deinit();
+
+    try std.testing.expect(!drv.connected);
+    try std.testing.expect(drv.client == null);
+    try std.testing.expectEqual(@as(u64, 0), drv.request_counter);
+    try std.testing.expectEqual(@as(u16, 3141), drv.db_config.port);
+}
+
+test "GeodeDriver QuicDriver alias" {
+    // Verify the legacy alias works
+    const allocator = std.testing.allocator;
+
+    const db_cfg = config.DbConfig{
+        .host = "127.0.0.1",
+        .port = 8443,
+        .transport = .quic_tls_strict,
+        .auth_token_env = null,
+        .timeout_ms = 10000,
+    };
+
+    var drv = QuicDriver.init(allocator, db_cfg);
+    defer drv.deinit();
+
+    try std.testing.expect(!drv.connected);
+    try std.testing.expectEqual(@as(u16, 8443), drv.db_config.port);
+}

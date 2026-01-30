@@ -192,11 +192,16 @@ pub const Loader = struct {
             batch.deinit(self.allocator);
         }
 
-        const reader = file.deprecatedReader();
-        var line_buf: [16384]u8 = undefined;
+        // Read entire file content
+        const content = file.readToEndAlloc(self.allocator, 100 * 1024 * 1024) catch |err| {
+            std.debug.print("Error reading file: {}\n", .{err});
+            return LoadResult{ .count = 0, .batches = 0, .errors = 1 };
+        };
+        defer self.allocator.free(content);
 
-        while (reader.readUntilDelimiterOrEof(&line_buf, '\n')) |maybe_line| {
-            const line = maybe_line orelse break;
+        // Process line by line
+        var lines = std.mem.splitScalar(u8, content, '\n');
+        while (lines.next()) |line| {
             if (line.len == 0) continue;
 
             // Parse JSON line to extract properties
@@ -218,8 +223,6 @@ pub const Loader = struct {
                 for (batch.items) |item| self.allocator.free(item);
                 batch.clearRetainingCapacity();
             }
-        } else |err| {
-            std.debug.print("Error reading line: {}\n", .{err});
         }
 
         // Execute remaining items
@@ -286,11 +289,16 @@ pub const Loader = struct {
             batch.deinit(self.allocator);
         }
 
-        const reader = file.deprecatedReader();
-        var line_buf: [16384]u8 = undefined;
+        // Read entire file content
+        const content = file.readToEndAlloc(self.allocator, 100 * 1024 * 1024) catch |err| {
+            std.debug.print("Error reading file: {}\n", .{err});
+            return LoadResult{ .count = 0, .batches = 0, .errors = 1 };
+        };
+        defer self.allocator.free(content);
 
-        while (reader.readUntilDelimiterOrEof(&line_buf, '\n')) |maybe_line| {
-            const line = maybe_line orelse break;
+        // Process line by line
+        var lines = std.mem.splitScalar(u8, content, '\n');
+        while (lines.next()) |line| {
             if (line.len == 0) continue;
 
             // Parse JSON line
@@ -312,8 +320,6 @@ pub const Loader = struct {
                 for (batch.items) |item| self.allocator.free(item);
                 batch.clearRetainingCapacity();
             }
-        } else |err| {
-            std.debug.print("Error reading line: {}\n", .{err});
         }
 
         // Execute remaining items
@@ -520,4 +526,149 @@ pub fn loadDataset(
     std.debug.print("  Edges: {d}\n", .{report.edge_count});
     std.debug.print("  Batches: {d}\n", .{report.batch_count});
     std.debug.print("  Errors: {d}\n", .{report.errors});
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+test "buildCreateNodeQuery - simple node" {
+    const allocator = std.testing.allocator;
+
+    // Create a simple JSON object
+    const json_str = "{\"id\": 123, \"name\": \"Alice\"}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateNodeQuery(allocator, "Person", parsed.value);
+    defer allocator.free(query);
+
+    // Query should create a node with label and properties
+    try std.testing.expect(std.mem.indexOf(u8, query, "CREATE (n:Person") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "id: 123") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "name: 'Alice'") != null);
+}
+
+test "buildCreateNodeQuery - empty properties" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateNodeQuery(allocator, "Empty", parsed.value);
+    defer allocator.free(query);
+
+    // Query should create a node with just label
+    try std.testing.expect(std.mem.indexOf(u8, query, "CREATE (n:Empty") != null);
+}
+
+test "buildCreateNodeQuery - various types" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{\"count\": 42, \"active\": true, \"ratio\": 3.14, \"value\": null}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateNodeQuery(allocator, "Node", parsed.value);
+    defer allocator.free(query);
+
+    try std.testing.expect(std.mem.indexOf(u8, query, "count: 42") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "active: true") != null);
+}
+
+test "buildCreateEdgeQuery - simple edge" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{\"src\": 1, \"dst\": 2}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateEdgeQuery(allocator, "KNOWS", parsed.value);
+    defer allocator.free(query);
+
+    try std.testing.expect(std.mem.indexOf(u8, query, "MATCH") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "CREATE") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, ":KNOWS") != null);
+}
+
+test "buildCreateEdgeQuery - with labels" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{\"src\": 100, \"dst\": 200, \"src_label\": \"Person\", \"dst_label\": \"Account\"}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateEdgeQuery(allocator, "OWNS", parsed.value);
+    defer allocator.free(query);
+
+    try std.testing.expect(std.mem.indexOf(u8, query, "(a:Person") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "(b:Account") != null);
+}
+
+test "buildCreateEdgeQuery - with properties" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{\"src\": 1, \"dst\": 2, \"weight\": 0.75, \"since\": 2024}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateEdgeQuery(allocator, "TRANSFER", parsed.value);
+    defer allocator.free(query);
+
+    try std.testing.expect(std.mem.indexOf(u8, query, "weight:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "since:") != null);
+}
+
+test "buildCreateEdgeQuery - string src/dst" {
+    const allocator = std.testing.allocator;
+
+    const json_str = "{\"src\": \"node_a\", \"dst\": \"node_b\"}";
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
+    defer parsed.deinit();
+
+    const query = try buildCreateEdgeQuery(allocator, "LINKS", parsed.value);
+    defer allocator.free(query);
+
+    try std.testing.expect(std.mem.indexOf(u8, query, "id: node_a") != null);
+    try std.testing.expect(std.mem.indexOf(u8, query, "id: node_b") != null);
+}
+
+test "LoadReport struct" {
+    // Create a LoadReport with explicit values (no defaults in Zig)
+    const report = LoadReport{
+        .dataset_id = "test_dataset",
+        .load_time_sec = 5.5,
+        .node_count = 100,
+        .edge_count = 200,
+        .batch_count = 10,
+        .errors = 2,
+    };
+
+    try std.testing.expectEqual(@as(u64, 100), report.node_count);
+    try std.testing.expectEqual(@as(u64, 200), report.edge_count);
+    try std.testing.expectEqual(@as(u64, 10), report.batch_count);
+    try std.testing.expectEqual(@as(u64, 2), report.errors);
+    try std.testing.expectEqual(@as(f64, 5.5), report.load_time_sec);
+    try std.testing.expectEqualStrings("test_dataset", report.dataset_id);
+}
+
+test "Loader init" {
+    const allocator = std.testing.allocator;
+
+    const loader_cfg = config.LoaderConfig{
+        .type = .quic_gql_batch,
+        .batch_size = 100,
+        .external_command = null,
+        .insert_node_template = null,
+        .insert_edge_template = null,
+    };
+
+    var ldr = Loader.init(allocator, loader_cfg);
+    defer ldr.deinit();
+
+    // batch_size is stored in loader_config
+    try std.testing.expectEqual(@as(u32, 100), ldr.loader_config.batch_size);
+    try std.testing.expect(!ldr.connected);
+    try std.testing.expect(ldr.client == null);
 }

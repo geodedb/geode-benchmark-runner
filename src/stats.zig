@@ -151,3 +151,174 @@ test "concurrency math" {
 
     try std.testing.expectApproxEqAbs(@as(f64, 307.7), qps_ceiling, 0.1);
 }
+
+test "percentile calculation - empty array" {
+    var latencies = [_]f64{};
+    const p = Percentiles.compute(&latencies);
+
+    try std.testing.expectEqual(@as(f64, 0), p.p50);
+    try std.testing.expectEqual(@as(f64, 0), p.p95);
+    try std.testing.expectEqual(@as(f64, 0), p.p99);
+    try std.testing.expectEqual(@as(f64, 0), p.p999);
+    try std.testing.expectEqual(@as(f64, 0), p.min);
+    try std.testing.expectEqual(@as(f64, 0), p.max);
+    try std.testing.expectEqual(@as(f64, 0), p.mean);
+}
+
+test "percentile calculation - single element" {
+    var latencies = [_]f64{42.0};
+    const p = Percentiles.compute(&latencies);
+
+    try std.testing.expectEqual(@as(f64, 42.0), p.p50);
+    try std.testing.expectEqual(@as(f64, 42.0), p.min);
+    try std.testing.expectEqual(@as(f64, 42.0), p.max);
+    try std.testing.expectEqual(@as(f64, 42.0), p.mean);
+}
+
+test "percentile calculation - two elements" {
+    var latencies = [_]f64{ 10.0, 20.0 };
+    const p = Percentiles.compute(&latencies);
+
+    try std.testing.expectApproxEqAbs(@as(f64, 15.0), p.p50, 0.1);
+    try std.testing.expectEqual(@as(f64, 10.0), p.min);
+    try std.testing.expectEqual(@as(f64, 20.0), p.max);
+    try std.testing.expectEqual(@as(f64, 15.0), p.mean);
+}
+
+test "percentile calculation - unsorted input" {
+    var latencies = [_]f64{ 5, 3, 1, 4, 2 };
+    const p = Percentiles.compute(&latencies);
+
+    try std.testing.expectEqual(@as(f64, 1.0), p.min);
+    try std.testing.expectEqual(@as(f64, 5.0), p.max);
+    try std.testing.expectEqual(@as(f64, 3.0), p.mean);
+    try std.testing.expectApproxEqAbs(@as(f64, 3.0), p.p50, 0.1);
+}
+
+test "tail amplification" {
+    const p = Percentiles{
+        .p50 = 10.0,
+        .p95 = 50.0,
+        .p99 = 100.0,
+        .p999 = 200.0,
+        .min = 5.0,
+        .max = 300.0,
+        .mean = 25.0,
+    };
+
+    const tail_amp = RunMetrics.computeTailAmplification(p);
+    try std.testing.expectEqual(@as(f64, 10.0), tail_amp);
+}
+
+test "tail amplification - zero p50" {
+    const p = Percentiles{
+        .p50 = 0,
+        .p95 = 50.0,
+        .p99 = 100.0,
+        .p999 = 200.0,
+        .min = 0,
+        .max = 300.0,
+        .mean = 25.0,
+    };
+
+    const tail_amp = RunMetrics.computeTailAmplification(p);
+    try std.testing.expectEqual(@as(f64, 0), tail_amp);
+}
+
+test "qps ceiling - zero p50" {
+    const qps_ceiling = RunMetrics.computeQpsCeiling(10, 0);
+    try std.testing.expectEqual(@as(f64, 0), qps_ceiling);
+}
+
+test "required in-flight calculation" {
+    const target_qps: f64 = 1000.0;
+    const p50_ms: f64 = 10.0;
+    const required = RunMetrics.computeRequiredInFlight(target_qps, p50_ms);
+
+    // 1000 QPS * 10ms = 1000 * 0.01s = 10 in-flight
+    try std.testing.expectApproxEqAbs(@as(f64, 10.0), required, 0.1);
+}
+
+test "validity check - all valid" {
+    const allocator = std.testing.allocator;
+
+    const metrics = RunMetrics{
+        .qps = 100.0,
+        .latency = Percentiles{
+            .p50 = 10.0,
+            .p95 = 50.0,
+            .p99 = 80.0,
+            .p999 = 90.0,
+            .min = 5.0,
+            .max = 100.0,
+            .mean = 25.0,
+        },
+        .error_rate = 0.0,
+        .violation_rate = 0.01,
+        .tail_amplification = 8.0,
+        .qps_ceiling_est_from_p50 = 1000.0,
+        .required_in_flight = 1.0,
+    };
+
+    var validity = try ValidityCheck.check(allocator, metrics, 100.0, 0.05, 0.01);
+    defer validity.deinit(allocator);
+
+    try std.testing.expect(validity.is_valid);
+    try std.testing.expectEqual(@as(usize, 0), validity.reasons.len);
+}
+
+test "validity check - p95 exceeds SLO" {
+    const allocator = std.testing.allocator;
+
+    const metrics = RunMetrics{
+        .qps = 100.0,
+        .latency = Percentiles{
+            .p50 = 10.0,
+            .p95 = 150.0, // Exceeds SLO of 100ms
+            .p99 = 200.0,
+            .p999 = 300.0,
+            .min = 5.0,
+            .max = 400.0,
+            .mean = 50.0,
+        },
+        .error_rate = 0.0,
+        .violation_rate = 0.01,
+        .tail_amplification = 20.0,
+        .qps_ceiling_est_from_p50 = 1000.0,
+        .required_in_flight = 1.0,
+    };
+
+    var validity = try ValidityCheck.check(allocator, metrics, 100.0, 0.05, 0.01);
+    defer validity.deinit(allocator);
+
+    try std.testing.expect(!validity.is_valid);
+    try std.testing.expectEqual(@as(usize, 1), validity.reasons.len);
+}
+
+test "validity check - multiple failures" {
+    const allocator = std.testing.allocator;
+
+    const metrics = RunMetrics{
+        .qps = 100.0,
+        .latency = Percentiles{
+            .p50 = 10.0,
+            .p95 = 150.0, // Exceeds SLO
+            .p99 = 200.0,
+            .p999 = 300.0,
+            .min = 5.0,
+            .max = 400.0,
+            .mean = 50.0,
+        },
+        .error_rate = 0.05, // Exceeds threshold
+        .violation_rate = 0.10, // Exceeds threshold
+        .tail_amplification = 20.0,
+        .qps_ceiling_est_from_p50 = 1000.0,
+        .required_in_flight = 1.0,
+    };
+
+    var validity = try ValidityCheck.check(allocator, metrics, 100.0, 0.05, 0.01);
+    defer validity.deinit(allocator);
+
+    try std.testing.expect(!validity.is_valid);
+    try std.testing.expectEqual(@as(usize, 3), validity.reasons.len);
+}

@@ -532,7 +532,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "find_person_by_id"),
-        .query = try allocator.dupe(u8, "MATCH (p:Person {id: 755}) RETURN p.name, p.country"),
+        .query = try allocator.dupe(u8, "MATCH (p:Person {id: $id}) RETURN p.name, p.country"),
         .weight = 2.0,
         .slo_ms = 50,
         .params = null,
@@ -540,7 +540,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "person_accounts"),
-        .query = try allocator.dupe(u8, "MATCH (p:Person)-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 10"),
+        .query = try allocator.dupe(u8, "MATCH (p:Person {id: $id})-[:OWN]->(a:Account) RETURN p.name, a.id LIMIT 10"),
         .weight = 2.0,
         .slo_ms = 100,
         .params = null,
@@ -548,7 +548,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "account_transfers"),
-        .query = try allocator.dupe(u8, "MATCH (a1:Account)-[t:TRANSFER]->(a2:Account) RETURN a1.id, t.amount, a2.id LIMIT 10"),
+        .query = try allocator.dupe(u8, "MATCH (a1:Account {id: $id})-[t:TRANSFER]->(a2:Account) RETURN a1.id, t.amount, a2.id LIMIT 10"),
         .weight = 2.0,
         .slo_ms = 100,
         .params = null,
@@ -556,7 +556,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "persons_by_country"),
-        .query = try allocator.dupe(u8, "MATCH (p:Person) WHERE p.country = 'Australia' RETURN p.name, p.city LIMIT 20"),
+        .query = try allocator.dupe(u8, "MATCH (p:Person) WHERE p.country = $name RETURN p.name, p.city LIMIT 20"),
         .weight = 1.5,
         .slo_ms = 100,
         .params = null,
@@ -564,7 +564,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "loan_repayments"),
-        .query = try allocator.dupe(u8, "MATCH (a:Account)-[r:REPAY]->(l:Loan) RETURN a.id, r.amount, l.id LIMIT 10"),
+        .query = try allocator.dupe(u8, "MATCH (a:Account {id: $id})-[r:REPAY]->(l:Loan) RETURN a.id, r.amount, l.id LIMIT 10"),
         .weight = 1.5,
         .slo_ms = 100,
         .params = null,
@@ -572,7 +572,7 @@ fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
 
     try operations.append(allocator, .{
         .name = try allocator.dupe(u8, "person_investments"),
-        .query = try allocator.dupe(u8, "MATCH (p:Person)-[i:INVEST]->(c:Company) RETURN p.name, i.ratio, c.name LIMIT 10"),
+        .query = try allocator.dupe(u8, "MATCH (p:Person {id: $id})-[i:INVEST]->(c:Company) RETURN p.name, i.ratio, c.name LIMIT 10"),
         .weight = 1.5,
         .slo_ms = 100,
         .params = null,

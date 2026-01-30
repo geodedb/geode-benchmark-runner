@@ -4,16 +4,17 @@
 
 Connects to Geode (or any graph database supporting QUIC/GQL protocol) to measure performance with GDC/LDBC-compatible metrics.
 
-## ✅ What Works Now
+## Features
 
-- **✅ Geode QUIC+TLS connection** - Successfully connects to localhost:3141
-- **✅ Concurrent worker execution** - Multi-threaded load generation
-- **✅ Real query execution** - Runs point lookups and k-hop traversals against Geode
-- **✅ Statistical metrics** - p50/p95/p99 latencies, QPS, tail amplification
-- **✅ Validity checking** - SLO compliance, error/violation rate thresholds
-- **✅ Output generation** - JSON results + markdown summaries
-- **✅ Configuration loading** - Full JSON config with proper string lifecycle
-- **✅ SNB CSV dataset preparation** - Processes LDBC SNB fixture files
+- **QUIC+TLS 1.3 connectivity** - Native Geode protocol support
+- **Concurrent worker execution** - Multi-threaded load generation
+- **Multiple benchmark packs** - GDC micro primitives, LDBC SNB, FinBench
+- **Statistical metrics** - p50/p95/p99/p999 latencies, QPS, tail amplification
+- **Validity checking** - SLO compliance, error/violation rate thresholds
+- **Output generation** - JSON results + markdown summaries
+- **Results comparison** - Regression detection between benchmark runs
+- **Dataset preparation** - SNB CSV, Graphalytics, FinBench format support
+- **Dataset verification** - Validates prepared datasets for integrity
 
 ## Build
 
@@ -42,7 +43,7 @@ Running benchmark: examples/configs/geode_test.json -> test_results/
 Connecting to 127.0.0.1:3141 (transport=quic_tls_insecure)
 Connected successfully
 Running for 10s with 2 workers, 5 in-flight each
-Benchmark pack: gdc_micro_primitives (2 operations)
+Benchmark pack: gdc_micro_primitives (7 operations)
 
 Benchmark complete!
   QPS: 48.55, p50: 10.50ms, p95: 10.82ms, p99: 11.04ms
@@ -72,35 +73,46 @@ All settings in JSON:
 }
 ```
 
-## Project Status
+## Available Benchmark Packs
 
-This is a **working prototype** demonstrating:
+- **gdc_micro_primitives** - Core graph operations (7 queries): point lookups, k-hop traversals, property filters, label scans
+- **finbench** - LDBC FinBench financial graph queries (10 queries): person/account lookups, transfers, aggregations, path queries
+- **gdc_snb_interactive_reads** - LDBC SNB interactive read queries
+- **gdc_snb_bi** - LDBC SNB business intelligence queries
+- **verify_data** - Data integrity verification queries
 
-- Real QUIC+TLS connectivity to Geode
-- Proper config/string lifecycle management (fixed arena issues)
-- Concurrent worker pools with mutex-protected shared state
-- GDC-aligned output format with network mode disclosure
-- Dataset preparation scaffolding for LDBC SNB CSV files
+## Dataset Preparation
 
-## Known Limitations
+```bash
+# Prepare SNB CSV dataset
+./zig-out/bin/graphbench dataset prepare \
+  --dataset path/to/snb/ \
+  --out work/ \
+  --type snb_csv
 
-- Dataset loader is stubbed (doesn't actually load into Geode yet)
-- Only 2 hardcoded queries in micro primitives pack
-- Sweep runs with stub data
-- No parameter substitution in queries yet
-- No dataset verification implementation
+# Prepare FinBench dataset
+./zig-out/bin/graphbench dataset prepare \
+  --dataset path/to/finbench/ \
+  --out work/ \
+  --type finbench
+
+# Verify prepared dataset
+./zig-out/bin/graphbench dataset verify \
+  --workdir work/
+```
 
 ## Architecture
 
 - `src/main.zig` - CLI entry point
 - `src/cli.zig` - Command parsing
-- `src/config.zig` - JSON config loading with proper allocation
+- `src/config.zig` - JSON/YAML config loading with proper allocation
 - `src/driver.zig` - GeodeDriver wrapping geode-client-zig
 - `src/runner.zig` - Worker threads + benchmark orchestration
 - `src/stats.zig` - Percentile calculations, validity checks
-- `src/output.zig` - JSON/markdown report generation
-- `src/dataset.zig` - SNB CSV preparation (streaming parser)
-- `src/loader.zig` - Dataset loading interface (stub)
+- `src/output.zig` - JSON/markdown report generation, result comparison
+- `src/dataset.zig` - SNB CSV, Graphalytics, FinBench preparation
+- `src/loader.zig` - Dataset loading into database
+- `src/benchpack.zig` - Benchmark pack loading from YAML/JSON
 
 ## Dependencies (Apache-2.0 licensed)
 
@@ -110,6 +122,7 @@ From `~/src/gl/devnw/zig/`:
 - **tls** - TLS 1.3 implementation
 - **dns** - DNS resolution
 - **json** - JSON parsing
+- **yaml** - YAML parsing
 - **slog** - Structured logging
 - **uri**, **strings**, **config** - Utilities
 
