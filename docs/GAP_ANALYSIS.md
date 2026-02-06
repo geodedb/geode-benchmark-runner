@@ -28,7 +28,7 @@ All actionable gaps have been closed. The remaining 2 gaps are explicitly blocke
 - **Impact**: Integration regressions may go unnoticed
 - **Status**: **BLOCKED**
 - **Blocker**: The `allow_failure: true` is intentional because:
-  - The Geode container registry (`registry.gitlab.com/devnw/geode/geode:latest`) may not be accessible to all CI runners
+  - The Geode container registry (`geodedb/geode:latest`) may not be accessible to all CI runners
   - The Geode service may not start reliably in CI environment
   - Removing this flag would cause all CI runs to fail when infrastructure is unavailable
 - **Unblock Steps**:

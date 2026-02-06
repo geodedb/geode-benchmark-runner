@@ -145,7 +145,7 @@ After running a benchmark, the output directory contains:
 
 From `build.zig.zon`:
 
-- `geode_client` - Official Geode Zig client (local path: `../geode-client-zig`)
+- `geode_client` - Official Geode Zig client (git: `gitlab.com/devnw/codepros/geode/geode-client-zig`)
 - `zig_cli` - CLI framework
 - `yaml` - YAML parser for benchmark packs
 - `quic`, `json`, `slog`, `strings` - Supporting libraries from gitlab.com/devnw/zig

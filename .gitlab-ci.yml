@@ -5,16 +5,8 @@
 # GDC-aligned benchmark harness for graph databases over QUIC + TLS 1.3
 #
 # DEPENDENCY SETUP:
-# This project depends on geode-client-zig (relative path: ../../geode-client-zig).
-# For CI to work, one of these must be configured:
-#
-# Option 1 (Recommended): Enable CI job token access
-#   In geode-client-zig project settings:
-#   Settings > CI/CD > Token Access > Add "geode-benchmark-runner" to allowlist
-#
-# Option 2: Use a deploy token
-#   Set CI/CD variable GEODE_CLONE_TOKEN with a token that has read access
-#   to geode-client-zig repository
+# This project depends on geode-client-zig (public git URL in build.zig.zon).
+# The dependency is resolved automatically by Zig's package manager.
 #
 # Pipeline stages:
 #   1. lint     - Code formatting checks
@@ -33,7 +25,7 @@
 
 variables:
   ZIG_VERSION: "0.15.1"
-  GEODE_IMAGE: "registry.gitlab.com/devnw/geode/geode:latest"
+  GEODE_IMAGE: "geodedb/geode:latest"
 
 default:
   tags:

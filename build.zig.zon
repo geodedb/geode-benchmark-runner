@@ -18,10 +18,9 @@
         // =======================================================================
 
         // Geode client library (QUIC-based graph database client)
-        // Uses relative path - CI clones this to the correct location
-        // NOTE: Private repo requires authentication for git URL access
         .geode_client = .{
-            .path = "../geode-client-zig",
+            .url = "git+https://gitlab.com/devnw/codepros/geode/geode-client-zig.git#9a2a224249f6d948f91b9ee9889ae2864cc795fd",
+            .hash = "geode_client_zig-0.1.0-8ysbV9gTAQA2AV4KArQZCF50pziBVtsNJ189Gjzczq4z",
         },
 
         // =======================================================================
