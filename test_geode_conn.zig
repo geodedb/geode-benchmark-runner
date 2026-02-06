@@ -14,7 +14,7 @@ pub fn main() !void {
     try client.connect();
     std.debug.print("Connected!\n", .{});
     
-    try client.sendHello("test_client", "0.1.0");
+    try client.sendHello("test_client", "0.1.4");
     std.debug.print("Sent HELLO\n", .{});
     
     const response = try client.receiveMessage(5000);

@@ -302,7 +302,7 @@ fn parseYamlScenarioConfigFromValue(allocator: std.mem.Allocator, map: ?[]const 
     var durability: []const u8 = "fsync";
     var consistency: []const u8 = "serializable";
     var cache_state: []const u8 = "warm";
-    var db_version: []const u8 = "0.1.0";
+    var db_version: []const u8 = "0.1.4";
 
     if (map) |m| {
         if (getMapStr(m, "network_mode")) |s| {
@@ -637,7 +637,7 @@ test "parseJsonConfig - minimal config" {
         \\    "durability": "fsync",
         \\    "consistency": "serializable",
         \\    "cache_state": "warm",
-        \\    "db_version": "0.1.0"
+        \\    "db_version": "0.1.4"
         \\  },
         \\  "workload": {
         \\    "benchpack": "gdc_micro_primitives",
@@ -720,7 +720,7 @@ test "parseJsonConfig - with dataset config" {
         \\    "durability": "fsync",
         \\    "consistency": "serializable",
         \\    "cache_state": "warm",
-        \\    "db_version": "0.1.0"
+        \\    "db_version": "0.1.4"
         \\  },
         \\  "workload": {
         \\    "benchpack": "finbench",
@@ -764,7 +764,7 @@ test "parseJsonConfig - with loader config" {
         \\    "durability": "fsync",
         \\    "consistency": "serializable",
         \\    "cache_state": "warm",
-        \\    "db_version": "0.1.0"
+        \\    "db_version": "0.1.4"
         \\  },
         \\  "workload": {
         \\    "benchpack": "custom",
@@ -808,7 +808,7 @@ test "parseJsonConfig - netem network mode" {
         \\    "durability": "fsync",
         \\    "consistency": "serializable",
         \\    "cache_state": "warm",
-        \\    "db_version": "0.1.0"
+        \\    "db_version": "0.1.4"
         \\  },
         \\  "workload": {
         \\    "benchpack": "gdc_micro_primitives",

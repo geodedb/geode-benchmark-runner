@@ -6,6 +6,7 @@
 const std = @import("std");
 const geode = @import("geode_client");
 const config = @import("config.zig");
+const main = @import("main.zig");
 
 pub const LoadReport = struct {
     dataset_id: []const u8,
@@ -44,7 +45,7 @@ pub const Loader = struct {
         );
 
         try client.connect();
-        try client.sendHello("graphbench-loader", "0.2.0");
+        try client.sendHello("graphbench-loader", main.version);
 
         const hello_response = try client.receiveMessage(5000);
         defer self.allocator.free(hello_response);

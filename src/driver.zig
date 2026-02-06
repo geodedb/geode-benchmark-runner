@@ -6,6 +6,7 @@
 const std = @import("std");
 const geode = @import("geode_client");
 const config = @import("config.zig");
+const main = @import("main.zig");
 
 pub const QueryResult = struct {
     success: bool,
@@ -49,7 +50,7 @@ pub const GeodeDriver = struct {
         try client.connect();
 
         // Send HELLO message
-        try client.sendHello("graphbench", "0.2.0");
+        try client.sendHello("graphbench", main.version);
 
         // Wait for HELLO response
         const hello_response = try client.receiveMessage(5000);

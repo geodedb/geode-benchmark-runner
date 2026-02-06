@@ -325,7 +325,7 @@ fn createTestConfig(allocator: std.mem.Allocator) config.BenchConfig {
             .durability = allocator.dupe(u8, "fsync") catch unreachable,
             .consistency = allocator.dupe(u8, "serializable") catch unreachable,
             .cache_state = allocator.dupe(u8, "warm") catch unreachable,
-            .db_version = allocator.dupe(u8, "0.1.0") catch unreachable,
+            .db_version = allocator.dupe(u8, "0.1.4") catch unreachable,
         },
         .workload = config.WorkloadConfig{
             .benchpack = allocator.dupe(u8, "gdc_micro_primitives") catch unreachable,

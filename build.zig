@@ -1,8 +1,25 @@
 const std = @import("std");
 
+fn getGitVersion(b: *std.Build) []const u8 {
+    var exit_code: u8 = 0;
+    const result = b.runAllowFail(&.{ "git", "describe", "--tags", "--always" }, &exit_code, .Inherit) catch {
+        return "0.2.0";
+    };
+    if (exit_code != 0) return "0.2.0";
+    const trimmed = std.mem.trim(u8, result, " \t\n\r");
+    if (trimmed.len == 0) return "0.2.0";
+    return b.dupe(trimmed);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // Get version from git tags, falling back to build.zig.zon version
+    const version = getGitVersion(b);
+
+    const build_opts = b.addOptions();
+    build_opts.addOption([]const u8, "version", version);
 
     // ========================================================================
     // External Dependencies
@@ -75,6 +92,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("json", json_mod);
     exe_mod.addImport("slog", slog_mod);
     exe_mod.addImport("strings", strings_mod);
+    exe_mod.addOptions("build_options", build_opts);
 
     const exe = b.addExecutable(.{
         .name = "graphbench",
@@ -125,6 +143,7 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("json", json_mod);
     test_mod.addImport("slog", slog_mod);
     test_mod.addImport("strings", strings_mod);
+    test_mod.addOptions("build_options", build_opts);
 
     const tests = b.addTest(.{
         .root_module = test_mod,

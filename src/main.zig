@@ -13,7 +13,8 @@ const loader = @import("loader.zig");
 const config = @import("config.zig");
 const benchpack = @import("benchpack.zig");
 
-pub const version = "0.2.0";
+const build_options = @import("build_options");
+pub const version = build_options.version;
 
 // ============================================================================
 // Command Definitions

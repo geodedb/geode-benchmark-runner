@@ -11,7 +11,7 @@
     "durability": "fsync",
     "consistency": "serializable",
     "cache_state": "cold",
-    "db_version": "0.1.0"
+    "db_version": "0.1.4"
   },
   "workload": {
     "benchpack": "gdc_micro_primitives",
