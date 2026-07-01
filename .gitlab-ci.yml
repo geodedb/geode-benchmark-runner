@@ -85,7 +85,7 @@ include:
 # =============================================================================
 
 .setup-zig:
-  image: "ubuntu:24.04"
+  image: "ubuntu:26.04"
   variables:
     ZIG_VERSION: "0.15.1"
     GIT_STRATEGY: clone
