@@ -13,7 +13,7 @@ repos:
   # Standard pre-commit hooks (best practices)
   # =============================================================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       # Formatting
       - id: trailing-whitespace
@@ -62,7 +62,7 @@ repos:
   # Python linting (for scripts)
   # =============================================================================
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.16.7
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -72,7 +72,7 @@ repos:
   # Markdown linting
   # =============================================================================
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
+    rev: v0.49.1
     hooks:
       - id: markdownlint
         args: [--fix, --disable, MD013, MD033, MD041, MD024, --]
@@ -82,7 +82,7 @@ repos:
   # YAML formatting
   # =============================================================================
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.14.0
+    rev: v2.16.0
     hooks:
       - id: pretty-format-yaml
         args: [--autofix, --indent, '2']
@@ -92,7 +92,7 @@ repos:
   # Commit message validation (Conventional Commits)
   # =============================================================================
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.1.0
+    rev: v4.18.0
     hooks:
       - id: commitizen
         stages: [commit-msg]
