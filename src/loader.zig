@@ -6,7 +6,7 @@
 const std = @import("std");
 const geode = @import("geode_client");
 const config = @import("config.zig");
-const main = @import("main.zig");
+const compat = @import("compat.zig");
 
 pub const LoadReport = struct {
     dataset_id: []const u8,
@@ -37,18 +37,19 @@ pub const Loader = struct {
     pub fn connect(self: *Loader, db_config: config.DbConfig) !void {
         const insecure = db_config.transport == .quic_tls_insecure;
 
-        var client = geode.GeodeClient.init(
+        var client = try geode.GeodeClient.init(
             self.allocator,
             db_config.host,
             db_config.port,
             insecure,
+            "",
+            "",
         );
+        errdefer client.deinit();
 
         try client.connect();
-        try client.sendHello("graphbench-loader", main.version);
-
-        const hello_response = try client.receiveMessage(5000);
-        defer self.allocator.free(hello_response);
+        // Send HELLO and wait for the HELLO response
+        try client.sendHello();
 
         self.client = client;
         self.connected = true;
@@ -71,7 +72,7 @@ pub const Loader = struct {
     pub fn loadDatasetFromDir(self: *Loader, workdir: []const u8) !LoadReport {
         if (!self.connected or self.client == null) return error.NotConnected;
 
-        const start = std.time.milliTimestamp();
+        const start = compat.milliTimestamp();
 
         var node_count: u64 = 0;
         var edge_count: u64 = 0;
@@ -116,7 +117,7 @@ pub const Loader = struct {
         batch_count += edges_result.batches;
         errors += edges_result.errors;
 
-        const end = std.time.milliTimestamp();
+        const end = compat.milliTimestamp();
         const duration = @as(f64, @floatFromInt(end - start)) / 1000.0;
 
         std.debug.print("Load complete: {d} nodes, {d} edges in {d:.2}s ({d} batches, {d} errors)\n", .{
@@ -144,20 +145,20 @@ pub const Loader = struct {
     };
 
     fn loadNodesFromDir(self: *Loader, dir_path: []const u8) !LoadResult {
-        var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch |err| {
+        var dir = compat.cwd().openDir(compat.io(), dir_path, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
                 return LoadResult{ .count = 0, .batches = 0, .errors = 0 };
             }
             return err;
         };
-        defer dir.close();
+        defer dir.close(compat.io());
 
         var total_count: u64 = 0;
         var total_batches: u64 = 0;
         var total_errors: u64 = 0;
 
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind != .file) continue;
             if (!std.mem.endsWith(u8, entry.name, ".jsonl")) continue;
 
@@ -179,22 +180,22 @@ pub const Loader = struct {
         };
     }
 
-    fn loadNodesFromFile(self: *Loader, dir: std.fs.Dir, filename: []const u8, label: []const u8) !LoadResult {
-        const file = try dir.openFile(filename, .{});
-        defer file.close();
+    fn loadNodesFromFile(self: *Loader, dir: std.Io.Dir, filename: []const u8, label: []const u8) !LoadResult {
+        const file = try dir.openFile(compat.io(), filename, .{});
+        defer file.close(compat.io());
 
         var count: u64 = 0;
         var batches: u64 = 0;
         var errors_count: u64 = 0;
 
-        var batch = std.ArrayList([]const u8){};
+        var batch = std.ArrayList([]const u8).empty;
         defer {
             for (batch.items) |item| self.allocator.free(item);
             batch.deinit(self.allocator);
         }
 
         // Read entire file content
-        const content = file.readToEndAlloc(self.allocator, 100 * 1024 * 1024) catch |err| {
+        const content = compat.readToEndAlloc(file, self.allocator, 100 * 1024 * 1024) catch |err| {
             std.debug.print("Error reading file: {}\n", .{err});
             return LoadResult{ .count = 0, .batches = 0, .errors = 1 };
         };
@@ -241,20 +242,20 @@ pub const Loader = struct {
     }
 
     fn loadEdgesFromDir(self: *Loader, dir_path: []const u8) !LoadResult {
-        var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch |err| {
+        var dir = compat.cwd().openDir(compat.io(), dir_path, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
                 return LoadResult{ .count = 0, .batches = 0, .errors = 0 };
             }
             return err;
         };
-        defer dir.close();
+        defer dir.close(compat.io());
 
         var total_count: u64 = 0;
         var total_batches: u64 = 0;
         var total_errors: u64 = 0;
 
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind != .file) continue;
             if (!std.mem.endsWith(u8, entry.name, ".jsonl")) continue;
 
@@ -276,22 +277,22 @@ pub const Loader = struct {
         };
     }
 
-    fn loadEdgesFromFile(self: *Loader, dir: std.fs.Dir, filename: []const u8, rel_type: []const u8) !LoadResult {
-        const file = try dir.openFile(filename, .{});
-        defer file.close();
+    fn loadEdgesFromFile(self: *Loader, dir: std.Io.Dir, filename: []const u8, rel_type: []const u8) !LoadResult {
+        const file = try dir.openFile(compat.io(), filename, .{});
+        defer file.close(compat.io());
 
         var count: u64 = 0;
         var batches: u64 = 0;
         var errors_count: u64 = 0;
 
-        var batch = std.ArrayList([]const u8){};
+        var batch = std.ArrayList([]const u8).empty;
         defer {
             for (batch.items) |item| self.allocator.free(item);
             batch.deinit(self.allocator);
         }
 
         // Read entire file content
-        const content = file.readToEndAlloc(self.allocator, 100 * 1024 * 1024) catch |err| {
+        const content = compat.readToEndAlloc(file, self.allocator, 100 * 1024 * 1024) catch |err| {
             std.debug.print("Error reading file: {}\n", .{err});
             return LoadResult{ .count = 0, .batches = 0, .errors = 1 };
         };
@@ -344,32 +345,16 @@ pub const Loader = struct {
 
         // Execute queries individually (could be optimized with batch protocol)
         for (queries) |query| {
-            const request_id = @as(u64, @intCast(std.time.milliTimestamp()));
-
-            self.client.?.sendRunGql(request_id, query, null) catch |err| {
-                std.debug.print("Send error: {}\n", .{err});
+            var result = self.client.?.query(query, null) catch |err| {
+                std.debug.print("Query error: {}\n", .{err});
                 errors += 1;
                 continue;
             };
-
-            const response = self.client.?.receiveMessage(30000) catch |err| {
-                std.debug.print("Receive error: {}\n", .{err});
-                errors += 1;
-                continue;
-            };
-            defer self.allocator.free(response);
+            defer result.deinit();
 
             // Check for error in response
-            const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, response, .{}) catch {
+            if (result.hasError()) {
                 errors += 1;
-                continue;
-            };
-            defer parsed.deinit();
-
-            if (parsed.value.object.get("type")) |type_val| {
-                if (type_val == .string and std.mem.eql(u8, type_val.string, "ERROR")) {
-                    errors += 1;
-                }
             }
         }
 
@@ -378,7 +363,7 @@ pub const Loader = struct {
 };
 
 fn buildCreateNodeQuery(allocator: std.mem.Allocator, label: []const u8, json: std.json.Value) ![]const u8 {
-    var props = std.ArrayList(u8){};
+    var props = std.ArrayList(u8).empty;
     defer props.deinit(allocator);
 
     try props.appendSlice(allocator, "{");
@@ -390,13 +375,13 @@ fn buildCreateNodeQuery(allocator: std.mem.Allocator, label: []const u8, json: s
             if (!first) try props.appendSlice(allocator, ", ");
             first = false;
 
-            try props.writer(allocator).print("{s}: ", .{entry.key_ptr.*});
+            try props.print(allocator, "{s}: ", .{entry.key_ptr.*});
 
             switch (entry.value_ptr.*) {
-                .string => |s| try props.writer(allocator).print("'{s}'", .{s}),
-                .integer => |i| try props.writer(allocator).print("{d}", .{i}),
-                .float => |f| try props.writer(allocator).print("{d}", .{f}),
-                .bool => |b| try props.writer(allocator).print("{}", .{b}),
+                .string => |s| try props.print(allocator, "'{s}'", .{s}),
+                .integer => |i| try props.print(allocator, "{d}", .{i}),
+                .float => |f| try props.print(allocator, "{d}", .{f}),
+                .bool => |b| try props.print(allocator, "{}", .{b}),
                 .null => try props.appendSlice(allocator, "null"),
                 else => try props.appendSlice(allocator, "null"),
             }
@@ -421,7 +406,7 @@ fn buildCreateEdgeQuery(allocator: std.mem.Allocator, rel_type: []const u8, json
     const edge_type = if (json.object.get("type")) |v| v.string else rel_type;
 
     // Build properties if any (excluding src/dst/labels/type metadata)
-    var props = std.ArrayList(u8){};
+    var props = std.ArrayList(u8).empty;
     defer props.deinit(allocator);
 
     try props.appendSlice(allocator, "{");
@@ -442,13 +427,13 @@ fn buildCreateEdgeQuery(allocator: std.mem.Allocator, rel_type: []const u8, json
         if (!first) try props.appendSlice(allocator, ", ");
         first = false;
 
-        try props.writer(allocator).print("{s}: ", .{entry.key_ptr.*});
+        try props.print(allocator, "{s}: ", .{entry.key_ptr.*});
 
         switch (entry.value_ptr.*) {
-            .string => |s| try props.writer(allocator).print("'{s}'", .{s}),
-            .integer => |i| try props.writer(allocator).print("{d}", .{i}),
-            .float => |f| try props.writer(allocator).print("{d}", .{f}),
-            .bool => |b| try props.writer(allocator).print("{}", .{b}),
+            .string => |s| try props.print(allocator, "'{s}'", .{s}),
+            .integer => |i| try props.print(allocator, "{d}", .{i}),
+            .float => |f| try props.print(allocator, "{d}", .{f}),
+            .bool => |b| try props.print(allocator, "{}", .{b}),
             .null => try props.appendSlice(allocator, "null"),
             else => try props.appendSlice(allocator, "null"),
         }

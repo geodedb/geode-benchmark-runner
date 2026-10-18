@@ -9,6 +9,7 @@ const driver = @import("driver.zig");
 const stats = @import("stats.zig");
 const output = @import("output.zig");
 const benchpack = @import("benchpack.zig");
+const compat = @import("compat.zig");
 
 const WorkerContext = struct {
     allocator: std.mem.Allocator,
@@ -24,7 +25,7 @@ const WorkerContext = struct {
     errors: *u64,
     violations: *u64,
     total_requests: *u64,
-    mutex: *std.Thread.Mutex,
+    mutex: *std.Io.Mutex,
 };
 
 fn workerThread(ctx: *WorkerContext) void {
@@ -33,17 +34,17 @@ fn workerThread(ctx: *WorkerContext) void {
 
     db_driver.connect() catch |err| {
         std.debug.print("[Worker {}] Connection failed: {}\n", .{ ctx.worker_id, err });
-        ctx.mutex.lock();
+        ctx.mutex.lockUncancelable(compat.io());
         ctx.errors.* += 1;
-        ctx.mutex.unlock();
+        ctx.mutex.unlock(compat.io());
         return;
     };
 
-    var rng = std.Random.DefaultPrng.init(@intCast(std.time.milliTimestamp() +% ctx.worker_id));
+    var rng = std.Random.DefaultPrng.init(@intCast(compat.milliTimestamp() +% ctx.worker_id));
     const end_time = ctx.start_time +| ctx.duration_ms; // Saturating add to prevent overflow
     var request_id: u64 = @as(u64, ctx.worker_id) * 1_000_000;
 
-    while (std.time.milliTimestamp() < end_time) {
+    while (compat.milliTimestamp() < end_time) {
         // Pick random operation based on weights
         const op_idx = selectOperation(ctx.pack.operations, &rng);
         const op = ctx.pack.operations[op_idx];
@@ -61,17 +62,17 @@ fn workerThread(ctx: *WorkerContext) void {
         var result = if (params) |p|
             db_driver.execWithParams(op.query, p) catch |err| blk: {
                 std.debug.print("[Worker {}] Query error: {}\n", .{ ctx.worker_id, err });
-                ctx.mutex.lock();
+                ctx.mutex.lockUncancelable(compat.io());
                 ctx.errors.* += 1;
-                ctx.mutex.unlock();
+                ctx.mutex.unlock(compat.io());
                 break :blk null;
             }
         else
             db_driver.exec(op.query, null) catch |err| blk: {
                 std.debug.print("[Worker {}] Query error: {}\n", .{ ctx.worker_id, err });
-                ctx.mutex.lock();
+                ctx.mutex.lockUncancelable(compat.io());
                 ctx.errors.* += 1;
-                ctx.mutex.unlock();
+                ctx.mutex.unlock(compat.io());
                 break :blk null;
             };
 
@@ -79,16 +80,16 @@ fn workerThread(ctx: *WorkerContext) void {
             defer res.deinit(ctx.allocator);
 
             if (!res.success) {
-                ctx.mutex.lock();
+                ctx.mutex.lockUncancelable(compat.io());
                 ctx.errors.* += 1;
-                ctx.mutex.unlock();
+                ctx.mutex.unlock(compat.io());
 
                 if (res.error_message) |msg| {
                     std.debug.print("[Worker {}] Query failed: {s}\n", .{ ctx.worker_id, msg });
                 }
             } else {
-                ctx.mutex.lock();
-                defer ctx.mutex.unlock();
+                ctx.mutex.lockUncancelable(compat.io());
+                defer ctx.mutex.unlock(compat.io());
 
                 ctx.latencies.append(ctx.allocator, res.latency_ms) catch {};
 
@@ -97,13 +98,13 @@ fn workerThread(ctx: *WorkerContext) void {
                 }
             }
 
-            ctx.mutex.lock();
+            ctx.mutex.lockUncancelable(compat.io());
             ctx.total_requests.* += 1;
-            ctx.mutex.unlock();
+            ctx.mutex.unlock(compat.io());
         }
 
         // Small delay to avoid overwhelming
-        std.posix.nanosleep(0, 1 * std.time.ns_per_ms);
+        compat.sleepNs(1 * std.time.ns_per_ms);
     }
 }
 
@@ -143,8 +144,8 @@ fn buildQueryParams(allocator: std.mem.Allocator, query: []const u8, request_id:
     if (!has_params) return null;
 
     // Build parameter map
-    var params = std.json.ObjectMap.init(allocator);
-    errdefer params.deinit();
+    var params: std.json.ObjectMap = .empty;
+    errdefer params.deinit(allocator);
 
     // Scan and add each parameter found in the query
     i = 0;
@@ -163,24 +164,24 @@ fn buildQueryParams(allocator: std.mem.Allocator, query: []const u8, request_id:
                 // Generate value based on parameter name
                 if (std.mem.eql(u8, param_name, "id")) {
                     const id = rng.random().intRangeAtMost(u32, 1, 1000);
-                    try params.put(key, .{ .integer = @intCast(id) });
+                    try params.put(allocator, key, .{ .integer = @intCast(id) });
                 } else if (std.mem.eql(u8, param_name, "src")) {
                     const id = rng.random().intRangeAtMost(u32, 1, 500);
-                    try params.put(key, .{ .integer = @intCast(id) });
+                    try params.put(allocator, key, .{ .integer = @intCast(id) });
                 } else if (std.mem.eql(u8, param_name, "dst")) {
                     const id = rng.random().intRangeAtMost(u32, 501, 1000);
-                    try params.put(key, .{ .integer = @intCast(id) });
+                    try params.put(allocator, key, .{ .integer = @intCast(id) });
                 } else if (std.mem.eql(u8, param_name, "min_age")) {
                     const age = rng.random().intRangeAtMost(u32, 18, 65);
-                    try params.put(key, .{ .integer = @intCast(age) });
+                    try params.put(allocator, key, .{ .integer = @intCast(age) });
                 } else if (std.mem.eql(u8, param_name, "name")) {
                     const name_str = try std.fmt.allocPrint(allocator, "test_{d}", .{request_id});
-                    try params.put(key, .{ .string = name_str });
+                    try params.put(allocator, key, .{ .string = name_str });
                 } else if (std.mem.eql(u8, param_name, "ts")) {
-                    try params.put(key, .{ .integer = std.time.milliTimestamp() });
+                    try params.put(allocator, key, .{ .integer = compat.milliTimestamp() });
                 } else if (std.mem.eql(u8, param_name, "weight")) {
                     const weight = rng.random().float(f64);
-                    try params.put(key, .{ .float = weight });
+                    try params.put(allocator, key, .{ .float = weight });
                 } else {
                     // Unknown parameter - free the key since we won't use it
                     allocator.free(key);
@@ -194,7 +195,7 @@ fn buildQueryParams(allocator: std.mem.Allocator, query: []const u8, request_id:
     }
 
     if (params.count() == 0) {
-        params.deinit();
+        params.deinit(allocator);
         return null;
     }
 
@@ -213,7 +214,7 @@ fn freeJsonParams(allocator: std.mem.Allocator, params: *std.json.Value) void {
                 allocator.free(entry.value_ptr.string);
             }
         }
-        params.object.deinit();
+        params.object.deinit(allocator);
     }
 }
 
@@ -229,7 +230,7 @@ pub fn executeBenchmark(
     var cfg = try config.loadConfig(allocator, config_path);
     defer cfg.deinit();
 
-    try std.fs.cwd().makePath(out_dir);
+    try compat.makePath(out_dir);
 
     std.debug.print("Connecting to {s}:{d} (transport={s})\n", .{
         cfg.db.host,
@@ -256,15 +257,15 @@ pub fn executeBenchmark(
     std.debug.print("Benchmark pack: {s} ({d} operations)\n", .{ pack.name, pack.operations.len });
 
     // Shared state
-    var latencies = std.ArrayList(f64){};
+    var latencies = std.ArrayList(f64).empty;
     defer latencies.deinit(allocator);
 
     var errors: u64 = 0;
     var violations: u64 = 0;
     var total_requests: u64 = 0;
-    var mutex = std.Thread.Mutex{};
+    var mutex: std.Io.Mutex = .init;
 
-    const start_time = std.time.milliTimestamp();
+    const start_time = compat.milliTimestamp();
     const duration_ms: i64 = @intCast(duration_sec * 1000);
 
     // Pre-allocate contexts to avoid reallocation during thread spawn
@@ -290,7 +291,7 @@ pub fn executeBenchmark(
     }
 
     // Now spawn threads - contexts won't move
-    var threads = std.ArrayList(std.Thread){};
+    var threads = std.ArrayList(std.Thread).empty;
     defer threads.deinit(allocator);
 
     for (contexts, 0..) |*ctx, idx| {
@@ -299,7 +300,7 @@ pub fn executeBenchmark(
 
         // Stagger worker startup to avoid QUIC endpoint initialization race
         if (idx + 1 < workers) {
-            std.Thread.sleep(50 * std.time.ns_per_ms);
+            compat.sleepNs(50 * std.time.ns_per_ms);
         }
     }
 
@@ -308,7 +309,7 @@ pub fn executeBenchmark(
         thread.join();
     }
 
-    const actual_duration = @as(f64, @floatFromInt(std.time.milliTimestamp() - start_time)) / 1000.0;
+    const actual_duration = @as(f64, @floatFromInt(compat.milliTimestamp() - start_time)) / 1000.0;
     const qps = @as(f64, @floatFromInt(total_requests)) / actual_duration;
 
     if (latencies.items.len == 0) {
@@ -365,7 +366,7 @@ pub fn executeSweep(
     var sweep_cfg = try config.loadSweepConfig(allocator, config_path);
     defer sweep_cfg.deinit();
 
-    try std.fs.cwd().makePath(out_dir);
+    try compat.makePath(out_dir);
 
     var best_qps: f64 = 0;
     var best_value: u32 = 0;
@@ -414,10 +415,7 @@ pub fn executeSweep(
         const result_path = try std.fmt.allocPrint(allocator, "{s}/result.json", .{point_dir});
         defer allocator.free(result_path);
 
-        const result_file = std.fs.cwd().openFile(result_path, .{}) catch continue;
-        defer result_file.close();
-
-        const result_content = result_file.readToEndAlloc(allocator, 1024 * 1024) catch continue;
+        const result_content = compat.readFileAlloc(allocator, result_path, 1024 * 1024) catch continue;
         defer allocator.free(result_content);
 
         const parsed = std.json.parseFromSlice(std.json.Value, allocator, result_content, .{}) catch continue;
@@ -548,10 +546,10 @@ test "freeJsonParams - cleanup" {
     const allocator = std.testing.allocator;
 
     // Build params manually to test cleanup
-    var obj = std.json.ObjectMap.init(allocator);
+    var obj: std.json.ObjectMap = .empty;
     const key = try allocator.dupe(u8, "test_key");
     const str_val = try allocator.dupe(u8, "test_value");
-    try obj.put(key, .{ .string = str_val });
+    try obj.put(allocator, key, .{ .string = str_val });
 
     var params = std.json.Value{ .object = obj };
 
@@ -562,13 +560,13 @@ test "freeJsonParams - cleanup" {
 test "WorkerContext struct" {
     const allocator = std.testing.allocator;
 
-    var latencies = std.ArrayList(f64){};
+    var latencies = std.ArrayList(f64).empty;
     defer latencies.deinit(allocator);
 
     var errors: u64 = 0;
     var violations: u64 = 0;
     var total_requests: u64 = 0;
-    var mutex = std.Thread.Mutex{};
+    var mutex: std.Io.Mutex = .init;
 
     const ops = [_]benchpack.BenchPack.Operation{};
     const pack = benchpack.BenchPack{

@@ -4,6 +4,7 @@
 // Benchmark pack loading from YAML/JSON files
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const yaml = @import("yaml");
 
 pub const BenchPack = struct {
@@ -66,7 +67,7 @@ pub const BenchPackInfo = struct {
 
 /// List available benchmark packs in a directory
 pub fn listBenchpacks(allocator: std.mem.Allocator, dir_path: []const u8) !std.ArrayList(BenchPackInfo) {
-    var result = std.ArrayList(BenchPackInfo){};
+    var result = std.ArrayList(BenchPackInfo).empty;
     errdefer {
         for (result.items) |item| {
             allocator.free(item.name);
@@ -75,16 +76,16 @@ pub fn listBenchpacks(allocator: std.mem.Allocator, dir_path: []const u8) !std.A
         result.deinit(allocator);
     }
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch |err| {
+    var dir = compat.cwd().openDir(compat.io(), dir_path, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             return result; // Return empty list if dir doesn't exist
         }
         return err;
     };
-    defer dir.close();
+    defer dir.close(compat.io());
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(compat.io())) |entry| {
         if (entry.kind != .file) continue;
 
         const is_yaml = std.mem.endsWith(u8, entry.name, ".yaml") or
@@ -154,10 +155,10 @@ pub fn loadBenchpack(allocator: std.mem.Allocator, dir_path: []const u8, name: [
 }
 
 fn loadBenchpackFromFile(allocator: std.mem.Allocator, path: []const u8) !BenchPack {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 10 * 1024 * 1024); // 10MB max
+    const content = try compat.readToEndAlloc(file, allocator, 10 * 1024 * 1024); // 10MB max
     defer allocator.free(content);
 
     if (std.mem.endsWith(u8, path, ".json")) {
@@ -195,7 +196,7 @@ fn parseYamlBenchpack(allocator: std.mem.Allocator, content: []const u8) !BenchP
     // Get operations
     const ops_seq = getMapSeq(root_map, "operations") orelse return error.MissingOperations;
 
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer {
         for (operations.items) |op| {
             allocator.free(op.name);
@@ -309,7 +310,7 @@ fn parseJsonBenchpack(allocator: std.mem.Allocator, content: []const u8) !BenchP
     const ops_val = root.get("operations") orelse return error.MissingOperations;
     const ops_arr = ops_val.array;
 
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer {
         for (operations.items) |op| {
             allocator.free(op.name);
@@ -378,7 +379,7 @@ fn loadBuiltinPack(allocator: std.mem.Allocator, name: []const u8) !BenchPack {
 }
 
 fn loadGdcMicroPrimitives(allocator: std.mem.Allocator) !BenchPack {
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer operations.deinit(allocator);
 
     try operations.append(allocator, .{
@@ -430,7 +431,7 @@ fn loadGdcMicroPrimitives(allocator: std.mem.Allocator) !BenchPack {
 }
 
 fn loadGdcGraphAlgorithms(allocator: std.mem.Allocator) !BenchPack {
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer operations.deinit(allocator);
 
     try operations.append(allocator, .{
@@ -466,7 +467,7 @@ fn loadGdcGraphAlgorithms(allocator: std.mem.Allocator) !BenchPack {
 }
 
 fn loadGdcCrudOperations(allocator: std.mem.Allocator) !BenchPack {
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer operations.deinit(allocator);
 
     try operations.append(allocator, .{
@@ -510,7 +511,7 @@ fn loadGdcCrudOperations(allocator: std.mem.Allocator) !BenchPack {
 }
 
 fn loadFinBench(allocator: std.mem.Allocator) !BenchPack {
-    var operations = std.ArrayList(BenchPack.Operation){};
+    var operations = std.ArrayList(BenchPack.Operation).empty;
     errdefer operations.deinit(allocator);
 
     // Simple read queries

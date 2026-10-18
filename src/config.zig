@@ -4,6 +4,7 @@
 // Configuration loading with YAML and JSON support
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const yaml = @import("yaml");
 
 pub const BenchConfig = struct {
@@ -124,10 +125,10 @@ pub const SweepDimension = struct {
 
 /// Load configuration from file (auto-detects YAML or JSON)
 pub fn loadConfig(allocator: std.mem.Allocator, path: []const u8) !BenchConfig {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 10 * 1024 * 1024);
     defer allocator.free(content);
 
     // Detect format by extension or content
@@ -542,10 +543,10 @@ fn parseJsonConfig(allocator: std.mem.Allocator, content: []const u8) !BenchConf
 }
 
 pub fn loadSweepConfig(allocator: std.mem.Allocator, path: []const u8) !SweepConfig {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 10 * 1024 * 1024);
     defer allocator.free(content);
 
     // Load base config first
@@ -573,7 +574,7 @@ pub fn loadSweepConfig(allocator: std.mem.Allocator, path: []const u8) !SweepCon
                 if (getMapMap(value.map, "sweep")) |sweep_map| {
                     if (getMapStr(sweep_map, "parameter")) |s| parameter = s;
                     if (getMapSeq(sweep_map, "values")) |seq| {
-                        var vals = std.ArrayList(u32){};
+                        var vals = std.ArrayList(u32).empty;
                         for (seq) |item| {
                             if (item == .int) {
                                 try vals.append(allocator, @intCast(item.int));
@@ -594,7 +595,7 @@ pub fn loadSweepConfig(allocator: std.mem.Allocator, path: []const u8) !SweepCon
                 parameter = p.string;
             }
             if (sweep_obj.get("values")) |v| {
-                var vals = std.ArrayList(u32){};
+                var vals = std.ArrayList(u32).empty;
                 for (v.array.items) |item| {
                     try vals.append(allocator, @intCast(item.integer));
                 }
@@ -605,7 +606,7 @@ pub fn loadSweepConfig(allocator: std.mem.Allocator, path: []const u8) !SweepCon
 
     // Default values if not specified
     if (values.len == 0) {
-        var vals = std.ArrayList(u32){};
+        var vals = std.ArrayList(u32).empty;
         try vals.appendSlice(allocator, &[_]u32{ 1, 5, 10, 20, 50, 100 });
         values = try vals.toOwnedSlice(allocator);
     }

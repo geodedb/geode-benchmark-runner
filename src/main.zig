@@ -12,6 +12,7 @@ const dataset = @import("dataset.zig");
 const loader = @import("loader.zig");
 const config = @import("config.zig");
 const benchpack = @import("benchpack.zig");
+const compat = @import("compat.zig");
 
 const build_options = @import("build_options");
 pub const version = build_options.version;
@@ -392,13 +393,11 @@ fn runBenchpackShow(ctx: *cli.Context) anyerror!void {
 // Entry Point
 // ============================================================================
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    compat.setIo(init.io);
+    const allocator = init.gpa;
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     const exit_code = cli.run(&root_cmd, args, allocator) catch |err| {
         std.debug.print("Error: {}\n", .{err});
@@ -422,4 +421,5 @@ test {
     _ = @import("loader.zig");
     _ = @import("dataset.zig");
     _ = @import("benchpack.zig");
+    _ = @import("compat.zig");
 }
