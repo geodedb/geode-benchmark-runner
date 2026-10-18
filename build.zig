@@ -2,7 +2,7 @@ const std = @import("std");
 
 fn getGitVersion(b: *std.Build) []const u8 {
     var exit_code: u8 = 0;
-    const result = b.runAllowFail(&.{ "git", "describe", "--tags", "--always" }, &exit_code, .Inherit) catch {
+    const result = b.runAllowFail(&.{ "git", "describe", "--tags", "--always" }, &exit_code, .inherit) catch {
         return "0.2.0";
     };
     if (exit_code != 0) return "0.2.0";
@@ -100,16 +100,16 @@ pub fn build(b: *std.Build) void {
     });
 
     // Link system libraries for QUIC
-    exe.linkLibC();
+    exe.root_module.link_libc = true;
     if (target.result.os.tag != .windows) {
-        exe.linkSystemLibrary("ssl");
-        exe.linkSystemLibrary("crypto");
+        exe.root_module.linkSystemLibrary("ssl", .{});
+        exe.root_module.linkSystemLibrary("crypto", .{});
     }
     if (target.result.os.tag == .linux) {
-        exe.linkSystemLibrary("dl");
+        exe.root_module.linkSystemLibrary("dl", .{});
     }
     if (target.result.os.tag == .windows) {
-        exe.linkSystemLibrary("ws2_32");
+        exe.root_module.linkSystemLibrary("ws2_32", .{});
     }
 
     b.installArtifact(exe);
@@ -149,13 +149,13 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
     });
 
-    tests.linkLibC();
+    tests.root_module.link_libc = true;
     if (target.result.os.tag != .windows) {
-        tests.linkSystemLibrary("ssl");
-        tests.linkSystemLibrary("crypto");
+        tests.root_module.linkSystemLibrary("ssl", .{});
+        tests.root_module.linkSystemLibrary("crypto", .{});
     }
     if (target.result.os.tag == .linux) {
-        tests.linkSystemLibrary("dl");
+        tests.root_module.linkSystemLibrary("dl", .{});
     }
 
     const run_tests = b.addRunArtifact(tests);

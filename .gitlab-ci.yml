@@ -18,13 +18,13 @@
 #   7. release  - Semantic release
 #
 # Environment variables:
-#   ZIG_VERSION      - Override Zig version (default: 0.15.1)
+#   ZIG_VERSION      - Override Zig version (default: 0.16.0)
 #   SKIP_INTEGRATION - Set to "true" to skip integration tests
 #
 # =============================================================================
 
 variables:
-  ZIG_VERSION: "0.15.1"
+  ZIG_VERSION: "0.16.0"
   GEODE_IMAGE: "geodedb/geode:latest"
 
 default:
@@ -48,7 +48,7 @@ stages:
 include:
   - component: gitlab.com/devnw/ci-catalog/zig-format@v1.56.0
     inputs:
-      zig_version: "0.15.1"
+      zig_version: "0.16.0"
       paths: "src/*.zig"
       stage: lint
       allow_failure: true
@@ -87,7 +87,7 @@ include:
 .setup-zig:
   image: "ubuntu:26.04"
   variables:
-    ZIG_VERSION: "0.15.1"
+    ZIG_VERSION: "0.16.0"
     GIT_STRATEGY: clone
     GIT_DEPTH: "1"
   cache:

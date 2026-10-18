@@ -1,4 +1,5 @@
 const std = @import("std");
+const compat = @import("compat.zig");
 const config = @import("config.zig");
 const stats = @import("stats.zig");
 
@@ -12,8 +13,8 @@ pub fn writeResults(
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "result.json" });
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().createFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
     const content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -55,7 +56,7 @@ pub fn writeResults(
     });
     defer allocator.free(content);
 
-    try file.writeAll(content);
+    try compat.writeAll(file, content);
 }
 
 pub fn writeMeta(
@@ -66,8 +67,8 @@ pub fn writeMeta(
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "meta.json" });
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().createFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
     const content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -91,7 +92,7 @@ pub fn writeMeta(
     });
     defer allocator.free(content);
 
-    try file.writeAll(content);
+    try compat.writeAll(file, content);
 }
 
 pub fn writeSummary(
@@ -104,8 +105,8 @@ pub fn writeSummary(
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "summary.md" });
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().createFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
     var content_parts = std.array_list.AlignedManaged([]const u8, null).init(allocator);
     defer {
@@ -182,7 +183,7 @@ pub fn writeSummary(
     }
 
     for (content_parts.items) |part| {
-        try file.writeAll(part);
+        try compat.writeAll(file, part);
     }
 }
 
@@ -195,8 +196,8 @@ pub fn writeSweepResults(
     const path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "sweep.json" });
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+    const file = try compat.cwd().createFile(compat.io(), path, .{});
+    defer file.close(compat.io());
 
     const content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -207,7 +208,7 @@ pub fn writeSweepResults(
     , .{ best_value, best_qps });
     defer allocator.free(content);
 
-    try file.writeAll(content);
+    try compat.writeAll(file, content);
 }
 
 /// Compare two benchmark result files and return comparison data
@@ -254,18 +255,18 @@ pub fn compareResults(
     regression_threshold_pct: f64,
 ) !CompareResult {
     // Read baseline result
-    const baseline_file = try std.fs.cwd().openFile(baseline_path, .{});
-    defer baseline_file.close();
-    const baseline_content = try baseline_file.readToEndAlloc(allocator, 1024 * 1024);
+    const baseline_file = try compat.cwd().openFile(compat.io(), baseline_path, .{});
+    defer baseline_file.close(compat.io());
+    const baseline_content = try compat.readToEndAlloc(baseline_file, allocator, 1024 * 1024);
     defer allocator.free(baseline_content);
 
     const baseline_parsed = try std.json.parseFromSlice(std.json.Value, allocator, baseline_content, .{});
     defer baseline_parsed.deinit();
 
     // Read current result
-    const current_file = try std.fs.cwd().openFile(current_path, .{});
-    defer current_file.close();
-    const current_content = try current_file.readToEndAlloc(allocator, 1024 * 1024);
+    const current_file = try compat.cwd().openFile(compat.io(), current_path, .{});
+    defer current_file.close(compat.io());
+    const current_content = try compat.readToEndAlloc(current_file, allocator, 1024 * 1024);
     defer allocator.free(current_content);
 
     const current_parsed = try std.json.parseFromSlice(std.json.Value, allocator, current_content, .{});
@@ -368,11 +369,11 @@ test "writeResults - creates valid JSON" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_output";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     var cfg = createTestConfig(allocator);
     defer cfg.deinit();
@@ -389,10 +390,10 @@ test "writeResults - creates valid JSON" {
     const result_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "result.json" });
     defer allocator.free(result_path);
 
-    const file = try std.fs.cwd().openFile(result_path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), result_path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 1024 * 1024);
     defer allocator.free(content);
 
     // Verify it's valid JSON
@@ -409,11 +410,11 @@ test "writeMeta - creates valid JSON" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_meta";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     var cfg = createTestConfig(allocator);
     defer cfg.deinit();
@@ -424,10 +425,10 @@ test "writeMeta - creates valid JSON" {
     const meta_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "meta.json" });
     defer allocator.free(meta_path);
 
-    const file = try std.fs.cwd().openFile(meta_path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), meta_path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 1024 * 1024);
     defer allocator.free(content);
 
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
@@ -442,11 +443,11 @@ test "writeSummary - creates markdown file" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_summary";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     var cfg = createTestConfig(allocator);
     defer cfg.deinit();
@@ -463,10 +464,10 @@ test "writeSummary - creates markdown file" {
     const summary_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "summary.md" });
     defer allocator.free(summary_path);
 
-    const file = try std.fs.cwd().openFile(summary_path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), summary_path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 1024 * 1024);
     defer allocator.free(content);
 
     // Verify it contains expected markdown content
@@ -480,11 +481,11 @@ test "writeSweepResults - creates valid JSON" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_sweep";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     try writeSweepResults(allocator, tmp_dir, 10, 1500.0);
 
@@ -492,10 +493,10 @@ test "writeSweepResults - creates valid JSON" {
     const sweep_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "sweep.json" });
     defer allocator.free(sweep_path);
 
-    const file = try std.fs.cwd().openFile(sweep_path, .{});
-    defer file.close();
+    const file = try compat.cwd().openFile(compat.io(), sweep_path, .{});
+    defer file.close(compat.io());
 
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const content = try compat.readToEndAlloc(file, allocator, 1024 * 1024);
     defer allocator.free(content);
 
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
@@ -510,11 +511,11 @@ test "compareResults - detects regression" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_compare";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     // Create baseline result
     const baseline_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "baseline.json" });
@@ -542,9 +543,9 @@ test "compareResults - detects regression" {
         \\}
     ;
 
-    const baseline_file = try std.fs.cwd().createFile(baseline_path, .{});
-    try baseline_file.writeAll(baseline_content);
-    baseline_file.close();
+    const baseline_file = try compat.cwd().createFile(compat.io(), baseline_path, .{});
+    try compat.writeAll(baseline_file, baseline_content);
+    baseline_file.close(compat.io());
 
     // Create current result with regression (lower QPS, higher p95)
     const current_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "current.json" });
@@ -572,9 +573,9 @@ test "compareResults - detects regression" {
         \\}
     ;
 
-    const current_file = try std.fs.cwd().createFile(current_path, .{});
-    try current_file.writeAll(current_content);
-    current_file.close();
+    const current_file = try compat.cwd().createFile(compat.io(), current_path, .{});
+    try compat.writeAll(current_file, current_content);
+    current_file.close(compat.io());
 
     // Compare with 10% threshold
     const result = try compareResults(allocator, baseline_path, current_path, 10.0);
@@ -590,11 +591,11 @@ test "compareResults - no regression" {
 
     // Create temp directory
     const tmp_dir = "/tmp/graphbench_test_compare2";
-    std.fs.cwd().makeDir(tmp_dir) catch |err| switch (err) {
+    compat.cwd().createDir(compat.io(), tmp_dir, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
-    defer std.fs.cwd().deleteTree(tmp_dir) catch {};
+    defer compat.cwd().deleteTree(compat.io(), tmp_dir) catch {};
 
     // Create baseline result
     const baseline_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "baseline.json" });
@@ -622,9 +623,9 @@ test "compareResults - no regression" {
         \\}
     ;
 
-    const baseline_file = try std.fs.cwd().createFile(baseline_path, .{});
-    try baseline_file.writeAll(baseline_content);
-    baseline_file.close();
+    const baseline_file = try compat.cwd().createFile(compat.io(), baseline_path, .{});
+    try compat.writeAll(baseline_file, baseline_content);
+    baseline_file.close(compat.io());
 
     // Create current result with improvement
     const current_path = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "current.json" });
@@ -652,9 +653,9 @@ test "compareResults - no regression" {
         \\}
     ;
 
-    const current_file = try std.fs.cwd().createFile(current_path, .{});
-    try current_file.writeAll(current_content);
-    current_file.close();
+    const current_file = try compat.cwd().createFile(compat.io(), current_path, .{});
+    try compat.writeAll(current_file, current_content);
+    current_file.close(compat.io());
 
     // Compare with 10% threshold
     const result = try compareResults(allocator, baseline_path, current_path, 10.0);

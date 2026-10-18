@@ -4,6 +4,7 @@
 // Dataset preparation from SNB CSV and Graphalytics formats
 
 const std = @import("std");
+const compat = @import("compat.zig");
 
 pub const DatasetType = enum {
     auto,
@@ -45,7 +46,7 @@ pub fn prepareDataset(
     else
         dataset_type;
 
-    try std.fs.cwd().makePath(out_dir);
+    try compat.makePath(out_dir);
 
     if (detected_type == .snb_csv) {
         try prepareSNBCSV(allocator, dataset_path, out_dir);
@@ -60,20 +61,20 @@ pub fn prepareDataset(
 
 fn detectDatasetType(allocator: std.mem.Allocator, path: []const u8) !DatasetType {
     // Check if it's a directory
-    const stat = std.fs.cwd().statFile(path) catch |err| {
+    const stat = compat.cwd().statFile(compat.io(), path, .{}) catch |err| {
         if (err == error.FileNotFound) {
             // Try as directory
-            var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch {
+            var dir = compat.cwd().openDir(compat.io(), path, .{ .iterate = true }) catch {
                 return error.DatasetNotFound;
             };
-            defer dir.close();
+            defer dir.close(compat.io());
 
             // Check for FinBench (has snapshot/ subdirectory with Account.csv, Person.csv, etc.)
-            if (dir.openDir("snapshot", .{ .iterate = true })) |snapshot_dir_val| {
+            if (dir.openDir(compat.io(), "snapshot", .{ .iterate = true })) |snapshot_dir_val| {
                 var snapshot_dir = snapshot_dir_val;
-                defer snapshot_dir.close();
+                defer snapshot_dir.close(compat.io());
                 var snap_iter = snapshot_dir.iterate();
-                while (try snap_iter.next()) |entry| {
+                while (try snap_iter.next(compat.io())) |entry| {
                     if (entry.kind == .file) {
                         if (std.mem.eql(u8, entry.name, "Account.csv") or
                             std.mem.eql(u8, entry.name, "Person.csv") or
@@ -86,7 +87,7 @@ fn detectDatasetType(allocator: std.mem.Allocator, path: []const u8) !DatasetTyp
             } else |_| {}
 
             var iter = dir.iterate();
-            while (try iter.next()) |entry| {
+            while (try iter.next(compat.io())) |entry| {
                 if (entry.kind == .file) {
                     if (std.mem.indexOf(u8, entry.name, "person_") != null or
                         std.mem.indexOf(u8, entry.name, "post_") != null)
@@ -102,15 +103,15 @@ fn detectDatasetType(allocator: std.mem.Allocator, path: []const u8) !DatasetTyp
     };
 
     if (stat.kind == .directory) {
-        var dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
-        defer dir.close();
+        var dir = try compat.cwd().openDir(compat.io(), path, .{ .iterate = true });
+        defer dir.close(compat.io());
 
         // Check for FinBench (has snapshot/ subdirectory)
-        if (dir.openDir("snapshot", .{ .iterate = true })) |snapshot_dir_val| {
+        if (dir.openDir(compat.io(), "snapshot", .{ .iterate = true })) |snapshot_dir_val| {
             var snapshot_dir = snapshot_dir_val;
-            defer snapshot_dir.close();
+            defer snapshot_dir.close(compat.io());
             var snap_iter = snapshot_dir.iterate();
-            while (try snap_iter.next()) |entry| {
+            while (try snap_iter.next(compat.io())) |entry| {
                 if (entry.kind == .file) {
                     if (std.mem.eql(u8, entry.name, "Account.csv") or
                         std.mem.eql(u8, entry.name, "Person.csv") or
@@ -123,7 +124,7 @@ fn detectDatasetType(allocator: std.mem.Allocator, path: []const u8) !DatasetTyp
         } else |_| {}
 
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind == .file) {
                 if (std.mem.indexOf(u8, entry.name, "person_") != null or
                     std.mem.indexOf(u8, entry.name, "post_") != null)
@@ -143,22 +144,22 @@ fn prepareSNBCSV(allocator: std.mem.Allocator, dataset_path: []const u8, out_dir
 
     const nodes_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "nodes" });
     defer allocator.free(nodes_dir);
-    try std.fs.cwd().makePath(nodes_dir);
+    try compat.makePath(nodes_dir);
 
     const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "edges" });
     defer allocator.free(edges_dir);
-    try std.fs.cwd().makePath(edges_dir);
+    try compat.makePath(edges_dir);
 
     // Open dataset directory
-    var dataset_dir = try std.fs.cwd().openDir(dataset_path, .{ .iterate = true });
-    defer dataset_dir.close();
+    var dataset_dir = try compat.cwd().openDir(compat.io(), dataset_path, .{ .iterate = true });
+    defer dataset_dir.close(compat.io());
 
     var node_count: u64 = 0;
     var edge_count: u64 = 0;
 
     // Process CSV files
     var iter = dataset_dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(compat.io())) |entry| {
         if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.name, ".csv")) continue;
 
@@ -180,8 +181,8 @@ fn prepareSNBCSV(allocator: std.mem.Allocator, dataset_path: []const u8, out_dir
     const stats_path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "stats.json" });
     defer allocator.free(stats_path);
 
-    const stats_file = try std.fs.cwd().createFile(stats_path, .{});
-    defer stats_file.close();
+    const stats_file = try compat.cwd().createFile(compat.io(), stats_path, .{});
+    defer stats_file.close(compat.io());
 
     const stats_content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -192,14 +193,14 @@ fn prepareSNBCSV(allocator: std.mem.Allocator, dataset_path: []const u8, out_dir
     , .{ node_count, edge_count });
     defer allocator.free(stats_content);
 
-    try stats_file.writeAll(stats_content);
+    try compat.writeAll(stats_file, stats_content);
 
     std.debug.print("Processed {d} nodes, {d} edges\n", .{ node_count, edge_count });
 }
 
 fn processNodeFile(
     allocator: std.mem.Allocator,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     filename: []const u8,
     out_dir: []const u8,
 ) !u64 {
@@ -217,17 +218,17 @@ fn processNodeFile(
     const out_filename = try std.fmt.allocPrint(allocator, "{s}/{s}.jsonl", .{ out_dir, label });
     defer allocator.free(out_filename);
 
-    const in_file = try dir.openFile(filename, .{});
-    defer in_file.close();
+    const in_file = try dir.openFile(compat.io(), filename, .{});
+    defer in_file.close(compat.io());
 
-    var out_file = try std.fs.cwd().createFile(out_filename, .{ .truncate = false });
-    defer out_file.close();
+    var out_file = try compat.cwd().createFile(compat.io(), out_filename, .{ .truncate = false });
+    defer out_file.close(compat.io());
 
     // Seek to end for appending
-    try out_file.seekFromEnd(0);
+    var out_file_appender = try compat.appender(out_file);
 
     // Read entire file content
-    const content = try in_file.readToEndAlloc(allocator, 100 * 1024 * 1024);
+    const content = try compat.readToEndAlloc(in_file, allocator, 100 * 1024 * 1024);
     defer allocator.free(content);
 
     var count: u64 = 0;
@@ -251,7 +252,7 @@ fn processNodeFile(
         , .{id_field});
         defer allocator.free(jsonl);
 
-        try out_file.writeAll(jsonl);
+        try out_file_appender.writeAll(jsonl);
         count += 1;
     }
 
@@ -260,7 +261,7 @@ fn processNodeFile(
 
 fn processEdgeFile(
     allocator: std.mem.Allocator,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     filename: []const u8,
     out_dir: []const u8,
 ) !u64 {
@@ -275,16 +276,16 @@ fn processEdgeFile(
     const out_filename = try std.fmt.allocPrint(allocator, "{s}/{s}.jsonl", .{ out_dir, rel_type });
     defer allocator.free(out_filename);
 
-    const in_file = try dir.openFile(filename, .{});
-    defer in_file.close();
+    const in_file = try dir.openFile(compat.io(), filename, .{});
+    defer in_file.close(compat.io());
 
-    var out_file = try std.fs.cwd().createFile(out_filename, .{ .truncate = false });
-    defer out_file.close();
+    var out_file = try compat.cwd().createFile(compat.io(), out_filename, .{ .truncate = false });
+    defer out_file.close(compat.io());
 
-    try out_file.seekFromEnd(0);
+    var out_file_appender = try compat.appender(out_file);
 
     // Read entire file content
-    const content = try in_file.readToEndAlloc(allocator, 100 * 1024 * 1024);
+    const content = try compat.readToEndAlloc(in_file, allocator, 100 * 1024 * 1024);
     defer allocator.free(content);
 
     var count: u64 = 0;
@@ -307,7 +308,7 @@ fn processEdgeFile(
         , .{ src, dst });
         defer allocator.free(jsonl);
 
-        try out_file.writeAll(jsonl);
+        try out_file_appender.writeAll(jsonl);
         count += 1;
     }
 
@@ -319,11 +320,11 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
 
     const nodes_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "nodes" });
     defer allocator.free(nodes_dir);
-    try std.fs.cwd().makePath(nodes_dir);
+    try compat.makePath(nodes_dir);
 
     const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "edges" });
     defer allocator.free(edges_dir);
-    try std.fs.cwd().makePath(edges_dir);
+    try compat.makePath(edges_dir);
 
     // Graphalytics uses edge list format: src dst [weight]
     // Extract unique nodes and edges
@@ -338,7 +339,7 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
     }
 
     // Process main edge file
-    const stat = std.fs.cwd().statFile(dataset_path) catch |err| {
+    const stat = compat.cwd().statFile(compat.io(), dataset_path, .{}) catch |err| {
         std.debug.print("Cannot access {s}: {}\n", .{ dataset_path, err });
         return err;
     };
@@ -350,14 +351,14 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
         const edges_file_path = try std.fmt.allocPrint(allocator, "{s}/EDGE.jsonl", .{edges_dir});
         defer allocator.free(edges_file_path);
 
-        var edges_file = try std.fs.cwd().createFile(edges_file_path, .{});
-        defer edges_file.close();
+        var edges_file = try compat.cwd().createFile(compat.io(), edges_file_path, .{});
+        defer edges_file.close(compat.io());
 
-        const in_file = try std.fs.cwd().openFile(dataset_path, .{});
-        defer in_file.close();
+        const in_file = try compat.cwd().openFile(compat.io(), dataset_path, .{});
+        defer in_file.close(compat.io());
 
         // Read entire file content (Zig 0.15.2 compatible pattern)
-        const content = in_file.readToEndAlloc(allocator, 100 * 1024 * 1024) catch |err| {
+        const content = compat.readToEndAlloc(in_file, allocator, 100 * 1024 * 1024) catch |err| {
             std.debug.print("Error reading file: {}\n", .{err});
             return err;
         };
@@ -387,16 +388,16 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
             , .{ src, dst });
             defer allocator.free(jsonl);
 
-            try edges_file.writeAll(jsonl);
+            try compat.writeAll(edges_file, jsonl);
             edge_count += 1;
         }
     } else {
         // Directory - look for .e or .edges file
-        var dir = try std.fs.cwd().openDir(dataset_path, .{ .iterate = true });
-        defer dir.close();
+        var dir = try compat.cwd().openDir(compat.io(), dataset_path, .{ .iterate = true });
+        defer dir.close(compat.io());
 
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind != .file) continue;
             if (!std.mem.endsWith(u8, entry.name, ".e") and
                 !std.mem.endsWith(u8, entry.name, ".edges"))
@@ -407,14 +408,14 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
             const edges_file_path = try std.fmt.allocPrint(allocator, "{s}/EDGE.jsonl", .{edges_dir});
             defer allocator.free(edges_file_path);
 
-            var edges_file = try std.fs.cwd().createFile(edges_file_path, .{});
-            defer edges_file.close();
+            var edges_file = try compat.cwd().createFile(compat.io(), edges_file_path, .{});
+            defer edges_file.close(compat.io());
 
-            const in_file = try dir.openFile(entry.name, .{});
-            defer in_file.close();
+            const in_file = try dir.openFile(compat.io(), entry.name, .{});
+            defer in_file.close(compat.io());
 
             // Read entire file content (Zig 0.15.2 compatible pattern)
-            const dir_content = in_file.readToEndAlloc(allocator, 100 * 1024 * 1024) catch |err| {
+            const dir_content = compat.readToEndAlloc(in_file, allocator, 100 * 1024 * 1024) catch |err| {
                 std.debug.print("Error reading file: {}\n", .{err});
                 return err;
             };
@@ -442,7 +443,7 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
                 , .{ src, dst });
                 defer allocator.free(jsonl);
 
-                try edges_file.writeAll(jsonl);
+                try compat.writeAll(edges_file, jsonl);
                 edge_count += 1;
             }
         }
@@ -452,8 +453,8 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
     const nodes_file_path = try std.fmt.allocPrint(allocator, "{s}/Node.jsonl", .{nodes_dir});
     defer allocator.free(nodes_file_path);
 
-    var nodes_file = try std.fs.cwd().createFile(nodes_file_path, .{});
-    defer nodes_file.close();
+    var nodes_file = try compat.cwd().createFile(compat.io(), nodes_file_path, .{});
+    defer nodes_file.close(compat.io());
 
     var node_iter = node_set.keyIterator();
     while (node_iter.next()) |key| {
@@ -463,7 +464,7 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
         , .{key.*});
         defer allocator.free(jsonl);
 
-        try nodes_file.writeAll(jsonl);
+        try compat.writeAll(nodes_file, jsonl);
     }
 
     const node_count = node_set.count();
@@ -472,8 +473,8 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
     const stats_path = try std.fmt.allocPrint(allocator, "{s}/stats.json", .{out_dir});
     defer allocator.free(stats_path);
 
-    const stats_file = try std.fs.cwd().createFile(stats_path, .{});
-    defer stats_file.close();
+    const stats_file = try compat.cwd().createFile(compat.io(), stats_path, .{});
+    defer stats_file.close(compat.io());
 
     const stats_content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -484,7 +485,7 @@ fn prepareGraphalytics(allocator: std.mem.Allocator, dataset_path: []const u8, o
     , .{ node_count, edge_count });
     defer allocator.free(stats_content);
 
-    try stats_file.writeAll(stats_content);
+    try compat.writeAll(stats_file, stats_content);
 
     std.debug.print("Processed {d} nodes, {d} edges\n", .{ node_count, edge_count });
 }
@@ -591,21 +592,21 @@ fn prepareFinBench(allocator: std.mem.Allocator, dataset_path: []const u8, out_d
     // Create output directories
     const nodes_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "nodes" });
     defer allocator.free(nodes_dir);
-    try std.fs.cwd().makePath(nodes_dir);
+    try compat.makePath(nodes_dir);
 
     const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "edges" });
     defer allocator.free(edges_dir);
-    try std.fs.cwd().makePath(edges_dir);
+    try compat.makePath(edges_dir);
 
     // Open snapshot directory
     const snapshot_path = try std.fs.path.join(allocator, &[_][]const u8{ dataset_path, "snapshot" });
     defer allocator.free(snapshot_path);
 
-    var snapshot_dir = std.fs.cwd().openDir(snapshot_path, .{}) catch |err| {
+    var snapshot_dir = compat.cwd().openDir(compat.io(), snapshot_path, .{}) catch |err| {
         std.debug.print("Cannot open snapshot directory: {}\n", .{err});
         return err;
     };
-    defer snapshot_dir.close();
+    defer snapshot_dir.close(compat.io());
 
     var total_nodes: u64 = 0;
     var total_edges: u64 = 0;
@@ -636,8 +637,8 @@ fn prepareFinBench(allocator: std.mem.Allocator, dataset_path: []const u8, out_d
     const stats_path = try std.fs.path.join(allocator, &[_][]const u8{ out_dir, "stats.json" });
     defer allocator.free(stats_path);
 
-    const stats_file = try std.fs.cwd().createFile(stats_path, .{});
-    defer stats_file.close();
+    const stats_file = try compat.cwd().createFile(compat.io(), stats_path, .{});
+    defer stats_file.close(compat.io());
 
     const stats_content = try std.fmt.allocPrint(allocator,
         \\{{
@@ -649,28 +650,28 @@ fn prepareFinBench(allocator: std.mem.Allocator, dataset_path: []const u8, out_d
     , .{ total_nodes, total_edges });
     defer allocator.free(stats_content);
 
-    try stats_file.writeAll(stats_content);
+    try compat.writeAll(stats_file, stats_content);
 
     std.debug.print("\nFinBench preparation complete: {d} nodes, {d} edges\n", .{ total_nodes, total_edges });
 }
 
 fn processFinBenchNodeFile(
     allocator: std.mem.Allocator,
-    snapshot_dir: std.fs.Dir,
+    snapshot_dir: std.Io.Dir,
     schema: FinBenchNodeSchema,
     out_dir: []const u8,
 ) !u64 {
-    const in_file = try snapshot_dir.openFile(schema.filename, .{});
-    defer in_file.close();
+    const in_file = try snapshot_dir.openFile(compat.io(), schema.filename, .{});
+    defer in_file.close(compat.io());
 
     const out_filename = try std.fmt.allocPrint(allocator, "{s}/{s}.jsonl", .{ out_dir, schema.label });
     defer allocator.free(out_filename);
 
-    var out_file = try std.fs.cwd().createFile(out_filename, .{});
-    defer out_file.close();
+    var out_file = try compat.cwd().createFile(compat.io(), out_filename, .{});
+    defer out_file.close(compat.io());
 
     // Read entire file content (Zig 0.15.2 compatible pattern)
-    const content = in_file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+    const content = compat.readToEndAlloc(in_file, allocator, 500 * 1024 * 1024) catch |err| {
         std.debug.print("Error reading file: {}\n", .{err});
         return err;
     };
@@ -682,7 +683,7 @@ fn processFinBenchNodeFile(
     const header_line = lines.next() orelse return 0;
 
     // Build column name to index map (need to copy strings as buffer will be reused)
-    var header_names = std.ArrayList([]const u8){};
+    var header_names = std.ArrayList([]const u8).empty;
     defer {
         for (header_names.items) |name| allocator.free(name);
         header_names.deinit(allocator);
@@ -721,7 +722,7 @@ fn processFinBenchNodeFile(
         if (line.len == 0) continue;
 
         // Split into fields
-        var fields = std.ArrayList([]const u8){};
+        var fields = std.ArrayList([]const u8).empty;
         defer fields.deinit(allocator);
 
         var field_iter = std.mem.splitScalar(u8, line, '|');
@@ -732,7 +733,7 @@ fn processFinBenchNodeFile(
         if (fields.items.len <= id_idx) continue;
 
         // Build JSON object
-        var json_buf = std.ArrayList(u8){};
+        var json_buf = std.ArrayList(u8).empty;
         defer json_buf.deinit(allocator);
 
         try json_buf.appendSlice(allocator, "{\"id\":");
@@ -770,7 +771,7 @@ fn processFinBenchNodeFile(
         }
 
         try json_buf.appendSlice(allocator, "}\n");
-        try out_file.writeAll(json_buf.items);
+        try compat.writeAll(out_file, json_buf.items);
         count += 1;
     }
 
@@ -779,12 +780,12 @@ fn processFinBenchNodeFile(
 
 fn processFinBenchEdgeFile(
     allocator: std.mem.Allocator,
-    snapshot_dir: std.fs.Dir,
+    snapshot_dir: std.Io.Dir,
     schema: FinBenchEdgeSchema,
     out_dir: []const u8,
 ) !u64 {
-    const in_file = try snapshot_dir.openFile(schema.filename, .{});
-    defer in_file.close();
+    const in_file = try snapshot_dir.openFile(compat.io(), schema.filename, .{});
+    defer in_file.close(compat.io());
 
     // Output filename includes from/to labels for clarity
     const out_filename = try std.fmt.allocPrint(allocator, "{s}/{s}_{s}_{s}.jsonl", .{
@@ -795,12 +796,12 @@ fn processFinBenchEdgeFile(
     });
     defer allocator.free(out_filename);
 
-    var out_file = try std.fs.cwd().createFile(out_filename, .{ .truncate = false });
-    defer out_file.close();
-    try out_file.seekFromEnd(0);
+    var out_file = try compat.cwd().createFile(compat.io(), out_filename, .{ .truncate = false });
+    defer out_file.close(compat.io());
+    var out_file_appender = try compat.appender(out_file);
 
     // Read entire file content (Zig 0.15.2 compatible pattern)
-    const content = in_file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+    const content = compat.readToEndAlloc(in_file, allocator, 500 * 1024 * 1024) catch |err| {
         std.debug.print("Error reading file: {}\n", .{err});
         return err;
     };
@@ -811,7 +812,7 @@ fn processFinBenchEdgeFile(
     // Read header and copy column names
     const header_line = lines.next() orelse return 0;
 
-    var header_names = std.ArrayList([]const u8){};
+    var header_names = std.ArrayList([]const u8).empty;
     defer {
         for (header_names.items) |name| allocator.free(name);
         header_names.deinit(allocator);
@@ -849,7 +850,7 @@ fn processFinBenchEdgeFile(
     while (lines.next()) |line| {
         if (line.len == 0) continue;
 
-        var fields = std.ArrayList([]const u8){};
+        var fields = std.ArrayList([]const u8).empty;
         defer fields.deinit(allocator);
 
         var field_iter = std.mem.splitScalar(u8, line, '|');
@@ -860,7 +861,7 @@ fn processFinBenchEdgeFile(
         if (fields.items.len <= from_idx or fields.items.len <= to_idx) continue;
 
         // Build JSON object
-        var json_buf = std.ArrayList(u8){};
+        var json_buf = std.ArrayList(u8).empty;
         defer json_buf.deinit(allocator);
 
         try json_buf.appendSlice(allocator, "{\"src\":");
@@ -897,7 +898,7 @@ fn processFinBenchEdgeFile(
         }
 
         try json_buf.appendSlice(allocator, "}\n");
-        try out_file.writeAll(json_buf.items);
+        try out_file_appender.writeAll(json_buf.items);
         count += 1;
     }
 
@@ -909,7 +910,7 @@ pub fn prepareParams(allocator: std.mem.Allocator, params_path: []const u8, out_
 
     _ = allocator;
 
-    try std.fs.cwd().makePath(out_dir);
+    try compat.makePath(out_dir);
 
     std.debug.print("Parameter pack prepared\n", .{});
 }
@@ -973,21 +974,21 @@ pub fn verifyDatasetDetailed(
         .node_files = 0,
         .edge_files = 0,
         .invalid_json_lines = 0,
-        .errors = std.ArrayList([]const u8){},
+        .errors = std.ArrayList([]const u8).empty,
     };
 
     // Read stats.json
     const stats_path = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "stats.json" });
     defer allocator.free(stats_path);
 
-    const stats_file = std.fs.cwd().openFile(stats_path, .{}) catch |err| {
+    const stats_file = compat.cwd().openFile(compat.io(), stats_path, .{}) catch |err| {
         try result.errors.append(allocator, try std.fmt.allocPrint(allocator, "Cannot read stats.json: {}", .{err}));
         result.valid = false;
         return result;
     };
-    defer stats_file.close();
+    defer stats_file.close(compat.io());
 
-    const stats_content = try stats_file.readToEndAlloc(allocator, 1024 * 1024);
+    const stats_content = try compat.readToEndAlloc(stats_file, allocator, 1024 * 1024);
     defer allocator.free(stats_content);
 
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, stats_content, .{}) catch |err| {
@@ -1008,11 +1009,11 @@ pub fn verifyDatasetDetailed(
     const nodes_dir = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "nodes" });
     defer allocator.free(nodes_dir);
 
-    if (std.fs.cwd().openDir(nodes_dir, .{ .iterate = true })) |dir_val| {
+    if (compat.cwd().openDir(compat.io(), nodes_dir, .{ .iterate = true })) |dir_val| {
         var dir = dir_val;
-        defer dir.close();
+        defer dir.close(compat.io());
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".jsonl")) {
                 result.node_files += 1;
 
@@ -1042,11 +1043,11 @@ pub fn verifyDatasetDetailed(
     const edges_dir = try std.fs.path.join(allocator, &[_][]const u8{ workdir, "edges" });
     defer allocator.free(edges_dir);
 
-    if (std.fs.cwd().openDir(edges_dir, .{ .iterate = true })) |dir_val| {
+    if (compat.cwd().openDir(compat.io(), edges_dir, .{ .iterate = true })) |dir_val| {
         var dir = dir_val;
-        defer dir.close();
+        defer dir.close(compat.io());
         var iter = dir.iterate();
-        while (try iter.next()) |entry| {
+        while (try iter.next(compat.io())) |entry| {
             if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".jsonl")) {
                 result.edge_files += 1;
 
@@ -1113,13 +1114,13 @@ fn verifyJsonlFile(allocator: std.mem.Allocator, path: []const u8) !JsonlFileCou
         .invalid_lines = 0,
     };
 
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+    const file = compat.cwd().openFile(compat.io(), path, .{}) catch |err| {
         std.debug.print("Cannot open file {s}: {}\n", .{ path, err });
         return counts;
     };
-    defer file.close();
+    defer file.close(compat.io());
 
-    const content = file.readToEndAlloc(allocator, 500 * 1024 * 1024) catch |err| {
+    const content = compat.readToEndAlloc(file, allocator, 500 * 1024 * 1024) catch |err| {
         std.debug.print("Cannot read file {s}: {}\n", .{ path, err });
         return counts;
     };
@@ -1203,7 +1204,7 @@ test "VerificationResult struct" {
         .node_files = 2,
         .edge_files = 3,
         .invalid_json_lines = 0,
-        .errors = std.ArrayList([]const u8){},
+        .errors = std.ArrayList([]const u8).empty,
     };
     defer result.deinit(allocator);
 
@@ -1229,7 +1230,7 @@ test "VerificationResult with errors" {
         .node_files = 1,
         .edge_files = 1,
         .invalid_json_lines = 5,
-        .errors = std.ArrayList([]const u8){},
+        .errors = std.ArrayList([]const u8).empty,
     };
 
     // Add an error message
