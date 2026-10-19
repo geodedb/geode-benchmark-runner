@@ -23,6 +23,12 @@
 #
 # =============================================================================
 
+workflow:
+  # SRE-172: a newer commit on the same ref cancels the superseded pipeline's
+  # interruptible (validation) jobs. Release/deploy jobs stay non-interruptible.
+  auto_cancel:
+    on_new_commit: interruptible
+
 variables:
   ZIG_VERSION: "0.16.0"
   GEODE_IMAGE: "geodedb/geode:latest"
@@ -133,6 +139,7 @@ include:
 # =============================================================================
 
 build:
+  interruptible: true
   extends: .setup-zig
   stage: build
   script:
@@ -144,6 +151,7 @@ build:
     expire_in: 1 day
 
 build-release:
+  interruptible: false
   extends: .setup-zig
   stage: build
   script:
@@ -163,6 +171,7 @@ build-release:
 # =============================================================================
 
 test:
+  interruptible: true
   extends: .setup-zig
   stage: test
   script:
@@ -194,6 +203,7 @@ test:
 # =============================================================================
 
 integration-tests:
+  interruptible: true
   extends: .setup-zig
   stage: integration
   # Allow failure since Geode server image may not be accessible
